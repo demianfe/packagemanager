@@ -171,15 +171,16 @@ proc parseDescription(descriptionString: string): Table[string, string] =
   #   index += 1
   # return result
 
-proc getRecipeDirTree*(recipeDir: string): string =
+proc getRecipeDirTree*(recipeDir: string): Recipe =
   #TODO: improve directory and file existence checking
   #reads the filepath and returns a the
   #directory files as strings
   var dependencies: Table[string, string]
+  var recipe: Recipe
   if os.dirExists(recipeDir):
     var resourcesDir:string = recipeDir & "Resources/"
     if os.fileExists(recipeDir & "Recipe"):
-      var recipe: Recipe = parseRecipe(readFile(recipeDir & "Recipe"))
+       var recipe = parseRecipe(readFile(recipeDir & "Recipe"))
     if os.dirExists(resourcesDir):
       #read description file
       if os.fileExists(resourcesDir & "Description"):
@@ -197,4 +198,3 @@ proc getRecipeDirTree*(recipeDir: string): string =
       if os.fileExists(resourcesDir & "Environment"):
         echo "TODO: Environment"
       #TODO: tasks
-     recipe
