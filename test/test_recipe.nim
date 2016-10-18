@@ -1,4 +1,5 @@
 import os
+import tables
 
 import ../src/core/recipe
 
@@ -13,5 +14,13 @@ var resourcesDir:string = recipeDir & "Resources/"
 #maybe use a tuple or something more structured
 var recipeString: string
 
-echo "about to call "
-echo getRecipeDirTree(recipeDir)
+var r = getRecipeDirTree(recipeDir)
+echo "Recipe " & $r
+
+# var pair: tuple[key: string, val:Table[string, seq[string]]]
+# for pair in pairs(r.functions):
+#   echo pair[0] & " - " & pair[1]
+
+# for pair in pairs(r.configurations):
+#   echo "conf: " & pair[0] & " - " & pair[1]
+  

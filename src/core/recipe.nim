@@ -88,8 +88,11 @@ const low_level_hooks=("do_fetch()", "do_unpack()", "do_patch()", "do_configurat
 
 #type for the Recipe itself to be passed around
 type
-  Recipe = tuple[configurations: Table[string, string],
-                functions: Table[string, seq[string]]]
+  Recipe* = object
+    configurations*: Table[string, string]
+    functions*: Table[string, seq[string]]
+  # tuple[configurations: Table[string, string],
+  #               functions: Table[string, seq[string]]]
         
 proc parseDependencies(dependenciesString: string): Table[string, string] =
   #TODO: handle useflgs
@@ -106,7 +109,6 @@ proc parseDependencies(dependenciesString: string): Table[string, string] =
   return depsTable
       
 proc parseRecipe(strFile: string): Recipe =
-  #general procedure tu be called from outside.
   #this prodecedure will call other procedures
   #to gather all recipe information needed on the
   #different stages of the build process.
@@ -118,17 +120,18 @@ proc parseRecipe(strFile: string): Recipe =
   var lines: seq[string] = split(strFile, "\n")
   for line in lines:
     #if line contans () is a function
-    #if line contains only ( is a compile configuration parameters
+    #if line contains only ( is a compile configuration parameter
     #if line contains = is keyval like
     #this code may be too general
     if line.len > 0 and not line.startsWith("#"):
+      #parses the recipe pairs of key=value attributes
       if (line.count("=")==1) and (line.find("(") == -1) and
-         #parses the recipe pairs of key=value attributes
         (line.find(")") == -1) and prev_func==false:
         var
           name, value: string
         (name, value) = split(line, "=")
-        configurations.add( name.strip(), value)
+        #echo "Adding configuration -> "& name.strip() & " = " & value
+        configurations.add(name.strip(), value)
       elif line.replace(" ","").find("()") != -1 and prevFunc == false:
         #finds a functions and treat following lines as part of the function
         #until the `}` function block end is found
@@ -146,10 +149,13 @@ proc parseRecipe(strFile: string): Recipe =
       else:
         var replacedString: string = line.replace(" ", "")
         if replacedString.find("=(") != -1 and replacedString.find("=(")+2 == replacedString.len:
-          #configure part
-          echo "ParseRecipe ->" & line
-  result = (configurations: configurations, functions: functions)
+          #TODO: configure part
+          echo "ParseRecipe.functionLine ->" & line
+  
+  result = Recipe(configurations: configurations, functions: functions)
+  # echo result
   return result
+  
 
 proc parseDescription(descriptionString: string): Table[string, string] =
   const sections: array[5, string] = ["[Name]", "[Summary]",
@@ -180,7 +186,7 @@ proc getRecipeDirTree*(recipeDir: string): Recipe =
   if os.dirExists(recipeDir):
     var resourcesDir:string = recipeDir & "Resources/"
     if os.fileExists(recipeDir & "Recipe"):
-       var recipe = parseRecipe(readFile(recipeDir & "Recipe"))
+       recipe = parseRecipe(readFile(recipeDir & "Recipe"))
     if os.dirExists(resourcesDir):
       #read description file
       if os.fileExists(resourcesDir & "Description"):
@@ -198,3 +204,4 @@ proc getRecipeDirTree*(recipeDir: string): Recipe =
       if os.fileExists(resourcesDir & "Environment"):
         echo "TODO: Environment"
       #TODO: tasks
+  return recipe
