@@ -89,23 +89,27 @@ const low_level_hooks=("do_fetch()", "do_unpack()", "do_patch()", "do_configurat
 #type for the Recipe itself to be passed around
 type
   Recipe* = object
-    configurations*: Table[string, string]
+    properties*: Table[string, string]
+    configurations*: Table[string, seq[string]]
     functions*: Table[string, seq[string]]
-  # tuple[configurations: Table[string, string],
-  #               functions: Table[string, seq[string]]]
+    dependencies*: Table[string, string]
+    buildDependencies*: Table[string, string]
+    description*: Table[string, string]
         
 proc parseDependencies(dependenciesString: string): Table[string, string] =
   #TODO: handle useflgs
   #TODO: dependencies have minor and mayor versions
-  #var result: seq[content] = @[]
   var depsTable = initTable[string, string]()
   var dependencies: seq[string] = split(dependenciesString, "\n")
   for dep in dependencies:
     if dep.len > 0:
       var
         k,v: string
-      (k,v) = split(dep, " ")
-      depsTable.add(k, v)
+      if dep.find(" ") != -1:
+        (k,v) = split(dep, " ")
+        depsTable.add(k, v)
+      else:
+        depsTable.add(dep.strip(),"")
   return depsTable
       
 proc parseRecipe(strFile: string): Recipe =
@@ -113,29 +117,31 @@ proc parseRecipe(strFile: string): Recipe =
   #to gather all recipe information needed on the
   #different stages of the build process.
   var result: Recipe
-  var prevFunc: bool = false
+  var prevFunc: bool = false #flag so we know we are reading a function
+  var prevConf: bool = false #flag so we know we are reading a configuration
   var functionName:string
-  var configurations = initTable[string, string]()
+  var configurationName:string
+  var properties = initTable[string, string]()
+  var configurations = initTable[string, seq[string]]()
   var functions = initTable[string, seq[string]]()
   var lines: seq[string] = split(strFile, "\n")
   for line in lines:
-    #if line contans () is a function
-    #if line contains only ( is a compile configuration parameter
+    #if line contans ´()´ is a function
+    #if line contains only ´=(´ is a Compile configuration parameter
     #if line contains = is keyval like
     #this code may be too general
     if line.len > 0 and not line.startsWith("#"):
       #parses the recipe pairs of key=value attributes
       if (line.count("=")==1) and (line.find("(") == -1) and
-        (line.find(")") == -1) and prev_func==false:
+        (line.find(")") == -1) and prev_func == false and prevConf == false:
         var
           name, value: string
         (name, value) = split(line, "=")
-        #echo "Adding configuration -> "& name.strip() & " = " & value
-        configurations.add(name.strip(), value)
-      elif line.replace(" ","").find("()") != -1 and prevFunc == false:
+        properties.add(name.strip(), value)
+      elif line.replace(" ","").find("()") != -1 and prev_func == false and prevConf == false:
         #finds a functions and treat following lines as part of the function
         #until the `}` function block end is found
-        prevFunc = true #flag so we know we are reading a function
+        prevFunc = true 
         functionName = line[0 .. line.find("()") - 1]
         functions.add(functionName, @[])
       elif prevFunc == true and line.strip().find("}") == 0:
@@ -148,35 +154,38 @@ proc parseRecipe(strFile: string): Recipe =
             break
       else:
         var replacedString: string = line.replace(" ", "")
-        if replacedString.find("=(") != -1 and replacedString.find("=(")+2 == replacedString.len:
-          #TODO: configure part
-          echo "ParseRecipe.functionLine ->" & line
+        if replacedString.find("=(") != -1 and replacedString.find("=(")+2 == replacedString.len and prevConf == false:
+          prevConf = true
+          configurationName = line.strip().replace("=(", "")
+          configurations.add(configurationName, @[])
+        elif replacedString.find(")") == 0 and not prevFunc:
+          prevConf = false
+          configurations[configurationName].add(line.strip())
+        elif prevConf:
+         configurations[configurationName].add(line.strip())
   
-  result = Recipe(configurations: configurations, functions: functions)
+  result = Recipe(properties: properties,
+                  configurations: configurations,
+                  functions: functions)
   # echo result
   return result
   
-
 proc parseDescription(descriptionString: string): Table[string, string] =
   const sections: array[5, string] = ["[Name]", "[Summary]",
                                       "[License]", "[Description]",
                                       "[Homepage]"]
-  # var index:int = 0
-  # #var contents: seq[content] = @[]
-  # var value: string
-  # var result: seq[content] = @[]
-  # for section in sections:
-  #   var startIndex: int = descriptionString.find(section) + section.len
-  #   if index < sections.len - 1:
-  #     var endIndex: int = descriptionString.find(sections[index + 1]) - 1
-  #     value = descriptionString[startIndex .. endIndex]
-  #     result.add( (section, value) )
-  #   elif (index == sections.len - 1):
-  #     value = descriptionString[startIndex .. descriptionString.len]
-  #     result.add( (section, value) )
-  #   index += 1
-  # return result
-
+  var index:int = 0
+  var value: string
+  var result = initTable[string, string]()
+  let lines = descriptionString.split("\n")
+  for line in lines:
+    let section = line.subStr(line.find("["), line.find("]"))
+    .replace("[", "")
+    .replace("]", "")
+    let value = line.subStr(line.find("]") + 1, len(line))
+    result.add(section.strip(), value.strip())
+  return result
+  
 proc getRecipeDirTree*(recipeDir: string): Recipe =
   #TODO: improve directory and file existence checking
   #reads the filepath and returns a the
@@ -188,19 +197,16 @@ proc getRecipeDirTree*(recipeDir: string): Recipe =
     if os.fileExists(recipeDir & "Recipe"):
        recipe = parseRecipe(readFile(recipeDir & "Recipe"))
     if os.dirExists(resourcesDir):
-      #read description file
       if os.fileExists(resourcesDir & "Description"):
-        #descriptionString = readFile(resourcesDir & "Description")
-        #var descriptionString = readFile(resourcesDir & "Description")
-        #var contents:seq[content] = parseDescription(readFile(resourcesDir & "Description"))
-        echo "found description"
+        recipe.description = parseDescription(readFile(resourcesDir & "Description"))
       if os.fileExists(resourcesDir & "BuildDependencies"):
+        #echo readFile(resourcesDir & "BuildDependencies")
+        recipe.buildDependencies = parseDependencies(readFile(resourcesDir & "BuildDependencies"))
         echo "TODO: BuildDependencies"
       if os.fileExists(resourcesDir & "BuildInformation"):
         echo "TODO: BuildInformation"
       if os.fileExists(resourcesDir & "Dependencies"):
-        echo "TODO: Dependencies"
-        dependencies = parseDependencies(readFile(resourcesDir & "Dependencies"))
+        recipe.dependencies = parseDependencies(readFile(resourcesDir & "Dependencies"))
       if os.fileExists(resourcesDir & "Environment"):
         echo "TODO: Environment"
       #TODO: tasks
