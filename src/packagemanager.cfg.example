@@ -1,5 +1,8 @@
+# rename this file removing the `.example` part
+# and modify it to your needs
+
 # $ is a reserved character, use it to define variables that
-#will bee used inside other configuration items.
+# will bee used inside other configuration items.
 [main]
 $root = "/" # root directory
 $depot = "$root/Depot"
@@ -7,5 +10,9 @@ programs = "$root/Programs" #all programs are installed here
 
 [compile]
 packagesPath = "$root/Packages" #where the compressed packages are saved
-archives = "$depot/Archives" #compressed packages are stored here
+archivesPath = "$depot/Archives" #compressed packages are stored here
+packagedRecipesPath = "$depot/PackagedRecipes"
+localRecipesPath = "$depot/LocalRecipes"
 sourcesPath = "$depot/Sources"#where the packages will be extracted
+recipeStores = "http://gobolinux.org/recipe-store"
+
