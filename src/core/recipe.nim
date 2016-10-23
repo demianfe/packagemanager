@@ -88,7 +88,7 @@ const low_level_hooks=("do_fetch()", "do_unpack()", "do_patch()", "do_configurat
 
 #type for the Recipe itself to be passed around
 type
-  Recipe* = object
+  Recipe* = ref object
     properties*: Table[string, string]
     configurations*: Table[string, seq[string]]
     functions*: Table[string, seq[string]]
