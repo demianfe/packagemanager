@@ -32,13 +32,11 @@ proc generateReplacmentTable(dict: Config): Table[string, string] =
         replacementTable.add(itemKey, value)
   return replacementTable
 
-proc readConfiguration*(): Table[string, string] =
+proc readConfiguration*(): Config =
   #currently reads from test directory
   var baseDir = os.getCurrentDir() & "/../src"
   var dict = loadConfig(baseDir & "/packagemanager.cfg")
-  var replacementTable = generateReplacmentTable(dict)
-  var configurationTable = initTable[string, string]()
-  
+  var replacementTable = generateReplacmentTable(dict) 
   for sectionKey in dict.keys():
     var section = dict[sectionKey]
     for itemKey in section.keys():
@@ -48,7 +46,5 @@ proc readConfiguration*(): Table[string, string] =
       while value.find("$") != -1 or count < len(replacementTable):
         value = replaceValue(value, replacementTable)
         count += 1
-      configurationTable.add(itemKey.replace("$",""), value)
-  return configurationTable
-
-        
+      dict.setSectionKey(sectionKey, itemKey, value)
+  return dict
