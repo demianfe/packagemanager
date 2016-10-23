@@ -1,4 +1,4 @@
-import ../src/utils/configurationReader
+import ../src/utils/configuration
 import Tables
 
 var conf = readConfiguration()

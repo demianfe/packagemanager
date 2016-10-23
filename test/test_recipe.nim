@@ -1,18 +1,24 @@
-import os
-import tables
-import strutils
+import os, tables, strutils
 
 import ../src/core/recipe
+import ../src/core/recipeutils
 
-var baseProjectDir = os.getCurrentDir() & "/../"
-#base recipe dir, should be a global variable from a configuration file
-var recipesDir: string = baseProjectDir & "/resources/Recipes/"
-#specific recipe directory
-var recipeDir:string = recipesDir & "Linux/3.13.3-r1/"#"OpenSSH/7.1p1-r1/" 
-#resources sub directory
-var resourcesDir:string = recipeDir & "Resources/"
-#maybe use a tuple or something more structured
-var recipeString: string
+const url = "/Data/devel/projects/demian/packagemanager/resources/Index_of_recipe-store.html"
 
-var r = getRecipeDirTree(recipeDir)
-echo " --> " & $(r.buildDependencies)
+proc test_recipeParser() = 
+  var baseProjectDir = os.getCurrentDir() & "/../"
+  var recipesDir: string = baseProjectDir & "/resources/Recipes/"
+  var recipeDir:string = recipesDir & "Linux/3.13.3-r1/"#"OpenSSH/7.1p1-r1/" 
+  var r = getRecipeDirTree(recipeDir)
+  echo "Found Recipe: " & $(r.buildDependencies)
+
+proc test_recipeFinder() =
+  #existing recipe
+  echo "Existing recipe"
+  echo $(not isNil findRecipe("Emacs", "24.3"))
+  #unexisting recipe
+  echo "Unexisting recipe"
+  echo $(isNil findRecipe("Emacs", "25.3"))
+  
+test_recipeFinder()
+
