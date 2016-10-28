@@ -3,7 +3,7 @@ import xmltree, httpclient, htmlparser, parsecfg
 import streams
 
 import ../utils/configuration
-import ../utils/download
+import ../utils/file
 
 #initialize httpclient
 var client = newHttpClient()
@@ -60,19 +60,21 @@ proc parseRecipe(strFile: string): Recipe =
   var configurationName: string
   var lines: seq[string] = split(strFile, "\n")
 
-  for line in lines:
+  for currentLine in lines:
     #if line contans ´()´ is a function
     #if line contains only ´=(´ is a Compile configuration parameter
     #if line contains = is keyval like
     #this code may be too general
-    if line.len > 0 and not line.startsWith("#"):
+    if currentLine.len > 0 and not currentLine.startsWith("#"):
+      #replace configuration variables
+      let line = conf.replaceValues(currentLine).replace("\"","")
       #parses the recipe pairs of key=value attributes
       if (line.count("=") == 1) and (line.find("(") == -1) and
         (line.find(")") == -1) and prevFunc == false and prevConf == false:
         var
           name, value: string
         (name, value) = split(line, "=")
-        #properties.add(name.strip(), value)
+        recipe.properties.add(name.strip(), value)
         if name.strip == "recipe_type":          
           recipe.recipe_type = value
         elif name.strip == "url":
@@ -105,8 +107,10 @@ proc parseRecipe(strFile: string): Recipe =
           configurationName = line.strip().replace("=(", "")
           recipe.configurations.add(configurationName, @[])
         elif replacedString.find(")") == 0 and not prevFunc:
+          replacedString = line.replace(")").strip() #warning
+          if len(replacedString) > 0:
+            recipe.configurations[configurationName].add(replacedString)
           prevConf = false
-          recipe.configurations[configurationName].add(line.strip())
         elif prevConf:
          recipe.configurations[configurationName].add(line.strip())
   return recipe
@@ -156,7 +160,7 @@ proc getRecipeDirTree(dir: string): Recipe =
 
 proc findRecipeURL(programName:string, version: string): string =
   #looks for a recipe in the recipe store 
-  echo "Looking for recipe $program version $version" % ["program", programName, "version", version] 
+  echo "Looking for recipe $program version $version" % ["program", programName, "version", version]
   let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
   let response = client.get(recipeStoreURL)
   let html = parseHtml(newStringStream(response.body))
@@ -173,11 +177,8 @@ proc findRecipeURL(programName:string, version: string): string =
     
 proc downloadAndExtractRecipe(url: string) = 
   let path = conf.getSectionValue("compile","packagedRecipesPath")
-  let recipePath = path & "/" & localDownloadFile(url, path)
-  let unpackCommand = "tar xf $recipePath -C $targetDir" % ["recipePath", recipePath,
-                                                             "targetDir", conf.getSectionValue("compile","localRecipesPath")]
-  echo "Extracting recipe."
-  discard execProcess(unpackCommand)
+  let filePath = localDownloadFile(url, path)
+  echo unpackFile(filePath, conf.getSectionValue("compile","localRecipesPath"))
 
 proc findLocalRecipe(programName:string, version: string): Recipe =
   var recipe:Recipe
