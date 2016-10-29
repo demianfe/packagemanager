@@ -7,15 +7,33 @@ import ../utils/file
 #initialize configuration
 let conf = readConfiguration()
 
+proc prepareInstall(recipe: Recipe): string = 
+  #create $programsPath/recpe.program/recipe.version
+  let programsPath = conf.getSectionValue("compile","programsPath")
+  let target = "$programsPath/$program/$version" % ["programsPath", programsPath,
+                                                  "program", recipe.program,
+                                                  "version", recipe.version]
+  let command = "mkdir -p $target" % ["target", target]
+  echo execProcess(command)
+  return target
+  
+### make file
+proc buildTypeMakeFile(recipe: Recipe, path: string) =
+  #TODO: handle unmanaged files
+  setCurrentDir(path)
+  echo execProcess("make")
+  echo execProcess("make install")
+
 ### build type section
 proc buildTypeConfigure(recipe: Recipe, path: string) =
-  echo "Configure options " & $recipe.configurations["configure_options"]
   #TODO: replace variables
   #read/load all configuration/installation parameters   
   #check if it uses autogen.sh
   #change ./configure mode to +x
   #check "$needs_build_directory" = "yes" this builds in another directory (?)
-  var command = "configure"  
+  let programsPath = conf.getSectionValue("compile","programsPath")
+  let target = prepareInstall(recipe)
+  var command = "configure --prefix=$target" % ["target", target]
   #verify that ./configure exists
   echo "Changing dir to " & path 
   setCurrentDir(path)
@@ -47,5 +65,6 @@ proc compile*(program: string, version: string) =
       #improve this wild guessing
       unpackedDir = archivesPath & "/" & unpackedDir & "-" & recipe.version
       buildTypeConfigure(recipe, unpackedDir)
+      buildTypeMakeFile(recipe, unpackedDir)
     else:
       echo "Recipe not found"
