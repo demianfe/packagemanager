@@ -2,6 +2,16 @@ import os, tables, strutils
 
 import ../src/core/recipe
 
+proc testRecipeVersions() =
+  
+  discard findRecipe("Ncurses", ">=", "5.0")
+  echo "-------------------------------------"
+  discard findRecipe("Ncurses", ">", "5.4")
+  echo "-------------------------------------"
+  discard findRecipe("Ncurses", "<=", "5.4")
+  echo "-------------------------------------"
+  discard findRecipe("Ncurses", "<", "5.4")
+
 proc testRecipeFinder() =
   #existing recipe
   echo "Existing recipe"
@@ -10,4 +20,4 @@ proc testRecipeFinder() =
   echo "Unexisting recipe"
   echo $(isNil findRecipe("Emacs", "25.3"))
 
-testRecipeFinder()
+testRecipeVersions()
