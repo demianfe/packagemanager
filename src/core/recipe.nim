@@ -1,6 +1,6 @@
 import os, strtabs, strutils, osproc, tables
 import xmltree, httpclient, htmlparser, parsecfg
-import streams
+import streams, algorithm
 
 import ../utils/configuration
 import ../utils/file
@@ -10,10 +10,17 @@ var client = newHttpClient()
 #initialize configuration
 let conf = readConfiguration()
 
+type
+  Dependency* = object
+    program*: string
+    version*: string
+    operator*: string
+    flags*: seq[string]
+
 #recipe sections and their values
 #type for the Recipe itself to be passed around
 type
-  Recipe* = ref object
+  Recipe* = object
     program*: string
     version*: string
     compile_version*: string
@@ -24,32 +31,44 @@ type
     properties*: Table[string, string]
     configurations*: Table[string, seq[string]]
     functions*: Table[string, seq[string]]
-    dependencies*: Table[string, string]
-    buildDependencies*: Table[string, string]
+    dependencies*: seq[Dependency]
+    buildDependencies*: seq[Dependency]
     description*: Table[string, string]
-        
-proc parseDependencies(dependenciesString: string): Table[string, string] =
-  #TODO: handle useflgs
-  #TODO: dependencies have minor and mayor versions
-  var depsTable = initTable[string, string]()
-  var dependencies: seq[string] = split(dependenciesString, "\n")
-  for dep in dependencies:
-    if dep.len > 0:
-      var
-        k,v: string
-      if dep.find(" ") != -1:
-        (k,v) = split(dep, " ")
-        depsTable.add(k, v)
-      else:
-        depsTable.add(dep.strip(),"")
-  return depsTable
 
-proc parseRecipe(strFile: string): Recipe =
-  #this prodecedure will call other procedures
-  #to gather all recipe information needed on the
-  #different stages of the build process.
-  #var result: Recipe
-  var recipe: Recipe = Recipe()
+type
+  RecipeRef* = ref Recipe
+
+#holds a key value combination of the best version match
+#path could be a local path or url acording to where the
+#best match was found
+
+type
+  PreferredVersion = tuple[version: float, path: string]
+
+proc parseDependencies(dependenciesString: string): seq[Dependency] =
+  var dependenciesLines: seq[string] = split(dependenciesString, "\n")
+  let depLen = len(dependenciesLines)
+  var dependencies: seq[Dependency]
+  newSeq(dependencies, 0)
+  for depLine in dependenciesLines:
+    if depLine.len > 0:
+      if depLine.find(" ") != -1:
+        let splitLine = split(depLine, " ")
+        var dep = Dependency()
+        dep.program = splitLine[0]
+        if depLine.find("<") != -1 or depLine.find(">") != -1 or depLine.find("=") != -1:
+          #contains operator
+          dep.operator = splitLine[1]
+          dep.version = splitLine[2]
+        else:
+          dep.version = splitLine[1]
+        #TODO: handle useflgs
+        #dep. = splitLine[3]
+        dependencies.add(dep)
+  return dependencies
+
+proc parseRecipe(strFile: string): RecipeRef =  
+  var recipe: RecipeRef = RecipeRef()
   recipe.properties = initTable[string, string]()
   recipe.configurations = initTable[string, seq[string]]()
   recipe.functions = initTable[string, seq[string]]()
@@ -131,13 +150,13 @@ proc parseDescription(descriptionString: string): Table[string, string] =
     result.add(section.strip(), value.strip())
   return result
   
-proc getRecipeDirTree(dir: string): Recipe =
+proc getRecipeDirTree(dir: string): RecipeRef =
   #TODO: improve directory and file existence checking
   #reads the filepath and returns a the
   #directory files as strings
   var dependencies: Table[string, string]
   let recipeDir = dir & "/"
-  var recipe: Recipe
+  var recipe: RecipeRef
   if os.dirExists(recipeDir):
     var resourcesDir:string = recipeDir & "Resources/"
     if os.fileExists(recipeDir & "Recipe"):
@@ -146,7 +165,6 @@ proc getRecipeDirTree(dir: string): Recipe =
       if os.fileExists(resourcesDir & "Description"):
         recipe.description = parseDescription(readFile(resourcesDir & "Description"))
       if os.fileExists(resourcesDir & "BuildDependencies"):
-        #echo readFile(resourcesDir & "BuildDependencies")
         recipe.buildDependencies = parseDependencies(readFile(resourcesDir & "BuildDependencies"))
         echo "TODO: BuildDependencies"
       if os.fileExists(resourcesDir & "BuildInformation"):
@@ -180,11 +198,42 @@ proc downloadAndExtractRecipe(url: string) =
   let filePath = localDownloadFile(url, path)
   echo unpackFile(filePath, conf.getSectionValue("compile","localRecipesPath"))
 
-proc findLocalRecipe(programName:string, version: string): Recipe =
-  var recipe:Recipe
+proc preferredVersion(version:float, operator: string,
+                      versionsTable: Table[float, string]): PreferredVersion =
+  var preferredVersion: float
+  var versions: seq[float] = @[]
+  for key in keys versionsTable:
+    versions.add(key)
+    
+  sort(versions, cmp[float], order = SortOrder.Descending)  
+  if operator == ">=":
+    #find last version and compare with the version
+    if version <= versions[0]:
+      preferredVersion = versions[0]
+  elif operator == ">":
+    #find last version and compare with the version
+    if version < versions[0]:
+      preferredVersion = versions[0]
+  elif operator == "<=":
+    #order versions and look for the one exact below or equal
+    for v in versions:
+      if v <= version:
+        preferredVersion = v
+        break
+  elif operator == "<":
+    #order versions and look for the one exact below
+    for v in versions:
+      if v < version:
+        preferredVersion = v
+        break
+  if preferredVersion != 0.0:
+    return (preferredVersion, versionsTable[preferredVersion])
+   
+proc findLocalRecipe(programName:string, version: string): RecipeRef =
+  var recipe:RecipeRef
   for dir in walkDir(conf.getSectionValue("compile","localRecipesPath")):
     if existsDir(dir.path) and dir.path.find(programName) != -1:
-      for subdir in walkDir(dir.path):      
+      for subdir in walkDir(dir.path):
         if existsDir(subdir.path) and subdir.path.find(version) != -1:
           recipe = getRecipeDirTree(subdir.path)
           break
@@ -192,14 +241,70 @@ proc findLocalRecipe(programName:string, version: string): Recipe =
     recipe.program = programName
     recipe.version = version
   return recipe
+
+proc findLocalRecipe(program:string, operator:string, versionStr: string): RecipeRef =
+  echo "Looking for recipes locally"
+  var versionsTable: Table[float, string] = initTable[float, string]()
+  for dir in walkDir(conf.getSectionValue("compile","localRecipesPath")):
+    if existsDir(dir.path) and dir.path.find(program) != -1:
+      for subdir in walkDir(dir.path):
+        let currentVersion = subdir.path.substr(subdir.path.rfind("/") + 1, subdir.path.find("-r") - 1)
+        versionsTable.add(parseFloat(currentVersion), subdir.path)
+        
+  if len(versionsTable) > 0:
+    let preferredVersion = preferredVersion(parseFloat(versionStr), operator, versionsTable)
+    if not isNil preferredVersion.path:
+      var recipe = getRecipeDirTree(preferredVersion.path)
+      if not isNil recipe:
+        recipe.program = program
+        recipe.version = $preferredVersion.version
+      return recipe
   
-proc findRecipe*(programName:string, version: string): Recipe =
-  #TODO: recipe might be as packaged recipe
+# looks up for the best matching recipe in the recipe store
+proc findRecipeUrl(program:string, operator:string, versionStr: string): string =
+  echo "Searching for recipe $1 $2 in the remote repository" % [program, versionStr]
+  var programVersions: seq[string] = @[]
+  let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
+  let response = client.get(recipeStoreURL)
+  let html = parseHtml(newStringStream(response.body))
+
+  for a in html.findAll("a"):
+    let href = a.attrs["href"]
+    if not href.isNil:
+      if href.toLower.find(program.toLower()) != -1:
+        let recipeUrl = recipeStoreURL & "/" & href
+        programVersions.add(recipeUrl)
+
+  var versionsTable: Table[float, string] = initTable[float, string]()
+  for pv in programVersions:
+    let recipeVersion = pv.split("--")[1]
+    if isDigit(recipeVersion[0]):
+      let v = parseFloat(recipeVersion.split("-")[0])
+      versionsTable.add(v, pv)
+  let preferredVersion = preferredVersion(parseFloat(versionStr), operator, versionsTable)
+  return preferredVersion.path
+  
+proc findRecipe*(program:string, operator:string, versionStr: string): RecipeRef =
+  var recipe = findLocalRecipe(program, operator, versionStr)
+  if isNil recipe:
+    let recipeUrl = findRecipeUrl(program, operator, versionStr)
+    #return file path or at least preferred version
+    downloadAndExtractRecipe recipeURL
+    let recipe: RecipeRef = findLocalRecipe(program, versionStr)
+  if not isNil recipe:
+    echo "Found best match: $1 $2" % [recipe.program, recipe.version]
+    return recipe
+  
+proc findRecipe*(programName:string, version: string): RecipeRef =
+  #TODO: look for the recipe remotely first but do not download it.
+  #TODO: lookup if is not locally packaged
   #recipes are normaly uses the first letter in upper case.
   #for now capitalize the program name
   let program = capitalize programName
-  var recipe: Recipe = findLocalRecipe(program, version)
+  var recipe: RecipeRef = findLocalRecipe(program, version)
   if isNil recipe:
+    echo "Recipe not found whitn local recipes"
+    echo "Looking remotely."
     let recipeURL = findRecipeURL(program, version)
     if not isNil recipeURL:
     #lookup for the extracted recipe in the recipes directory
