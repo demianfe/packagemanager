@@ -265,15 +265,18 @@ proc findRecipeUrl(program:string, operator:string, versionStr: string): Preferr
   echo "Searching for recipe $1 $2 in the remote repository" % [program, versionStr]
   var programVersions: seq[string] = @[]
   let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
-  #TODO: download recipe store file only once
+  # TODO: download recipe store file only once
   var client = newHttpClient()
   let response = client.get(recipeStoreURL)
   let html = parseHtml(newStringStream(response.body))
-
+  
   for a in html.findAll("a"):
     let href = a.attrs["href"]
     if not href.isNil:
-      if href.toLower.find(program.toLower()) != -1:
+      var currentProgram = href.toLower.substr
+      currentProgram = currentProgram.substr(currentProgram.rfind("/"),
+                                             currentProgram.find("--") - 1)
+      if currentProgram == program.toLower():
         let recipeUrl = recipeStoreURL & "/" & href
         programVersions.add(recipeUrl)
 
@@ -318,7 +321,9 @@ proc findRecipe*(programName:string, version: string): RecipeRef =
   return recipe
 
 proc findRecipe*(dependency: Dependency): RecipeRef =
-  echo(dependency.program, " | ---- | ", dependency.version)
+  echo "***********************************************************"
+  echo $dependency
+  echo "***********************************************************"
   if isNil dependency.operator:
     return findRecipe(dependency.program, dependency.version)
   else:

@@ -65,34 +65,42 @@ proc compileProgram(recipe: Recipe) =
       buildTypeConfigure(recipe, unpackedDir)
       buildTypeMakeFile(recipe, unpackedDir)
 
-proc loadDependenciesGraph(recipe: RecipeRef) =
+proc loadDependencies(recipe: RecipeRef,
+                      recipesTable: var Table[string, RecipeRef]):
+                      Table[string, RecipeRef] =
   #given a recipe load al recipes needed to compile
   for dep in recipe.dependencies:
-    let dependedRecipe = findRecipe(dep)
-    if not isNil dependedRecipe:
-      if len(dependedRecipe.dependencies) > 0:
-        echo "loading depencies for recipe $program $version" % ["program",
+    # hash the name+version ?
+    echo dep.program&dep.version
+    let recipeKey = dep.program&dep.version
+    if not recipesTable.hasKey(recipeKey):  
+      let dependedRecipe = findRecipe(dep)
+      recipesTable.add(recipeKey, dependedRecipe)
+      #echo recipesTable
+      if not isNil dependedRecipe:
+        if len(dependedRecipe.dependencies) > 0:
+          echo "loading depencies for recipe $program $version" % ["program",
                                                                 recipe.program,
                                                                 "version",
                                                                 recipe.version]
-        loadDependenciesGraph(dependedRecipe)
-      else:
-        echo "Recipe not found for $1 version: $2" % [dependedRecipe.program,
+          recipesTable = loadDependencies(dependedRecipe, recipesTable)
+        else:
+          echo "Recipe not found for $1 version: $2" % [dependedRecipe.program,
                                                       dependedRecipe.version]
           
 proc compile*(program: string, version: string) =
   #load all recipes from dependencies list to a seq
   #iterate and compile each item
-  echo ""
   var recipe: RecipeRef = findRecipe(program, version)
+  # A table holding all recipes that need to be installed
+  # inculding dependencies
+  # the key is program+version so it will install each program only once
+  var recipes: Table[string, RecipeRef] = inittable[string, RecipeRef]()
   if not isNil recipe:
-    var dependencies: seq[Recipe] = newSeq[Recipe]()
     #TODO: check if $Program/$version is already installed
     #iterate over the dependencies of the dependencies... 
-    loadDependenciesGraph(recipe)
-      #dependencies.add(recipe)
-    #echo dependencies
-    #compileProgram recipe
+    recipes = loadDependencies(recipe, recipes)
+    echo recipes
      
   else:
     echo "Recipe not found"

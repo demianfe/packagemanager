@@ -94,6 +94,12 @@ proc removeRevision(versions: Table[string, string]): Table[string, string] =
   return result
 
 proc findPreferedVersion*(version: string, operator: string, versions: Table[string, string]): PreferredVersion =
-  let bestMatch = findVersion(version, operator, versions)  
-  let path = versions[bestMatch]
-  return (bestMatch, path)
+  try:
+    let bestMatch = findVersion(version, operator, versions)  
+    let path = versions[bestMatch]
+    return (bestMatch, path)
+  except:
+    for key in versions.keys():
+      echo (key, " : ", versions[key])
+    writeStackTrace()
+    quit(-1)
