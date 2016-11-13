@@ -22,5 +22,4 @@ proc testCompile() =
     # Do something else!
     echo "No arguments"
 
-
 testCompile()

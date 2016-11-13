@@ -4,9 +4,8 @@ import streams, algorithm
 
 import ../utils/configuration
 import ../utils/file
+import ./versions
 
-#initialize httpclient
-var client = newHttpClient()
 #initialize configuration
 let conf = readConfiguration()
 
@@ -38,12 +37,12 @@ type
 type
   RecipeRef* = ref Recipe
 
-#holds a key value combination of the best version match
-#path could be a local path or url acording to where the
-#best match was found
+proc `$`*(recipe: Recipe): string =
+  let result: string = "$1, $2, $3" % [recipe.program, recipe.version, recipe.file_md5]
 
-type
-  PreferredVersion = tuple[version: float, path: string]
+proc `$`*(recipe: RecipeRef): string =
+  echo (recipe.program, recipe.version, recipe.file_md5)
+  let result: string = "$1, $2, $3" % [recipe.program, recipe.version, recipe.file_md5]
 
 proc parseDependencies(dependenciesString: string): seq[Dependency] =
   var dependenciesLines: seq[string] = split(dependenciesString, "\n")
@@ -180,6 +179,7 @@ proc findRecipeURL(programName:string, version: string): string =
   #looks for a recipe in the recipe store 
   echo "Looking for recipe $program version $version" % ["program", programName, "version", version]
   let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
+  var client = newHttpClient()
   let response = client.get(recipeStoreURL)
   let html = parseHtml(newStringStream(response.body))
   var recipeUrl: string
@@ -198,36 +198,10 @@ proc downloadAndExtractRecipe(url: string) =
   let filePath = localDownloadFile(url, path)
   echo unpackFile(filePath, conf.getSectionValue("compile","localRecipesPath"))
 
-proc preferredVersion(version:float, operator: string,
-                      versionsTable: Table[float, string]): PreferredVersion =
-  var preferredVersion: float
-  var versions: seq[float] = @[]
-  for key in keys versionsTable:
-    versions.add(key)
-    
-  sort(versions, cmp[float], order = SortOrder.Descending)  
-  if operator == ">=":
-    #find last version and compare with the version
-    if version <= versions[0]:
-      preferredVersion = versions[0]
-  elif operator == ">":
-    #find last version and compare with the version
-    if version < versions[0]:
-      preferredVersion = versions[0]
-  elif operator == "<=":
-    #order versions and look for the one exact below or equal
-    for v in versions:
-      if v <= version:
-        preferredVersion = v
-        break
-  elif operator == "<":
-    #order versions and look for the one exact below
-    for v in versions:
-      if v < version:
-        preferredVersion = v
-        break
-  if preferredVersion != 0.0:
-    return (preferredVersion, versionsTable[preferredVersion])
+proc preferredVersion(version:string, operator: string,
+                      versionsTable: Table[string, string]): PreferredVersion =
+
+    return findPreferedVersion(version, operator, versionsTable)
    
 proc findLocalRecipe(programName:string, version: string): RecipeRef =
   var recipe:RecipeRef
@@ -244,30 +218,32 @@ proc findLocalRecipe(programName:string, version: string): RecipeRef =
 
 proc findLocalRecipe(program:string, operator:string, versionStr: string): RecipeRef =
   echo "Looking for recipes locally"
-  var versionsTable: Table[float, string] = initTable[float, string]()
+  var versionsTable: Table[string, string] = initTable[string, string]()
   for dir in walkDir(conf.getSectionValue("compile","localRecipesPath")):
     if existsDir(dir.path) and dir.path.find(program) != -1:
       for subdir in walkDir(dir.path):
         let currentVersion = subdir.path.substr(subdir.path.rfind("/") + 1, subdir.path.find("-r") - 1)
-        versionsTable.add(parseFloat(currentVersion), subdir.path)
+        versionsTable.add(currentVersion, subdir.path)
         
   if len(versionsTable) > 0:
-    let preferredVersion = preferredVersion(parseFloat(versionStr), operator, versionsTable)
+    let preferredVersion = preferredVersion(versionStr, operator, versionsTable)
     if not isNil preferredVersion.path:
       var recipe = getRecipeDirTree(preferredVersion.path)
       if not isNil recipe:
         recipe.program = program
         recipe.version = $preferredVersion.version
       return recipe
-  
+      
 # looks up for the best matching recipe in the recipe store
-proc findRecipeUrl(program:string, operator:string, versionStr: string): string =
+proc findRecipeUrl(program:string, operator:string, versionStr: string): PreferredVersion =
   echo "Searching for recipe $1 $2 in the remote repository" % [program, versionStr]
   var programVersions: seq[string] = @[]
   let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
+  #TODO: download recipe store file only once
+  var client = newHttpClient()
   let response = client.get(recipeStoreURL)
   let html = parseHtml(newStringStream(response.body))
-
+ 
   for a in html.findAll("a"):
     let href = a.attrs["href"]
     if not href.isNil:
@@ -275,29 +251,32 @@ proc findRecipeUrl(program:string, operator:string, versionStr: string): string 
         let recipeUrl = recipeStoreURL & "/" & href
         programVersions.add(recipeUrl)
 
-  var versionsTable: Table[float, string] = initTable[float, string]()
+  var versionsTable: Table[string, string] = initTable[string, string]()
   for pv in programVersions:
     let recipeVersion = pv.split("--")[1]
     if isDigit(recipeVersion[0]):
-      let v = parseFloat(recipeVersion.split("-")[0])
+      let v = recipeVersion.split("-")[0]
       versionsTable.add(v, pv)
-  let preferredVersion = preferredVersion(parseFloat(versionStr), operator, versionsTable)
-  return preferredVersion.path
-  
+  let preferredVersion = preferredVersion(versionStr, operator, versionsTable)
+  return preferredVersion
+
+#TODO: look for the recipe remotely first but do not download it.
+#TODO: lookup if is not locally packaged
 proc findRecipe*(program:string, operator:string, versionStr: string): RecipeRef =
-  var recipe = findLocalRecipe(program, operator, versionStr)
-  if isNil recipe:
-    let recipeUrl = findRecipeUrl(program, operator, versionStr)
+  echo "Looking for $1 $2 $3" % [program, operator, versionStr]  
+  #find best version remotely
+  # look for best recipe version locally
+  # if not found, download recipe
+  let preferredVersion = findRecipeUrl(program, operator, versionStr)
+  if not isNil preferredVersion.path:
     #return file path or at least preferred version
-    downloadAndExtractRecipe recipeURL
-    let recipe: RecipeRef = findLocalRecipe(program, versionStr)
-  if not isNil recipe:
-    echo "Found best match: $1 $2" % [recipe.program, recipe.version]
+    var recipe: RecipeRef = findLocalRecipe(program, preferredVersion.version)
+    if isNil recipe:
+      downloadAndExtractRecipe preferredVersion.path
+      recipe = findLocalRecipe(program, preferredVersion.version)
     return recipe
   
 proc findRecipe*(programName:string, version: string): RecipeRef =
-  #TODO: look for the recipe remotely first but do not download it.
-  #TODO: lookup if is not locally packaged
   #recipes are normaly uses the first letter in upper case.
   #for now capitalize the program name
   let program = capitalize programName
@@ -311,3 +290,10 @@ proc findRecipe*(programName:string, version: string): RecipeRef =
       downloadAndExtractRecipe recipeURL
       recipe = findLocalRecipe(program, version)
   return recipe
+
+proc findRecipe*(dependency: Dependency): RecipeRef =
+  echo(dependency.program, " | ---- | ", dependency.version)
+  if isNil dependency.operator:
+    return findRecipe(dependency.program, dependency.version)
+  else:
+    return findRecipe(dependency.program, dependency.operator, dependency.version)

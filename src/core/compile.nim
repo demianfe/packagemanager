@@ -46,9 +46,7 @@ proc buildTypeConfigure(recipe: Recipe, path: string) =
   command = "./" & command
   echo execProcess(command)
  
-proc compile*(program: string, version: string) =
-  var recipe: Recipe = findRecipe(program, version)
-  if not isNil recipe:
+proc compileProgram(recipe: Recipe) =
     let packagesDir = conf.getSectionValue("compile","packagesPath")
     let archivesPath = conf.getSectionValue("compile","archivesPath")
     let splitUrl = rsplit(recipe.url,"/")
@@ -66,5 +64,30 @@ proc compile*(program: string, version: string) =
       unpackedDir = archivesPath & "/" & unpackedDir & "-" & recipe.version
       buildTypeConfigure(recipe, unpackedDir)
       buildTypeMakeFile(recipe, unpackedDir)
-    else:
-      echo "Recipe not found"
+
+proc loadDependenciesGraph(recipe: RecipeRef) =
+  #given a recipe load al recipes needed to compile
+  for dep in recipe.dependencies:
+    let dependedRecipe = findRecipe(dep)
+    
+    echo dependedRecipe
+    if len(dependedRecipe.dependencies) > 0:
+      echo "loading depencies for recipe $program $version" % ["program",recipe.program, "version", recipe.version]
+      loadDependenciesGraph(dependedRecipe)
+          
+proc compile*(program: string, version: string) =
+  #load all recipes from dependencies list to a seq
+  #iterate and compile each item
+  echo ""
+  var recipe: RecipeRef = findRecipe(program, version)
+  if not isNil recipe:
+    var dependencies: seq[Recipe] = newSeq[Recipe]()
+    #TODO: check if $Program/$version is already installed
+    #iterate over the dependencies of the dependencies... 
+    loadDependenciesGraph(recipe)
+      #dependencies.add(recipe)
+    #echo dependencies
+    #compileProgram recipe
+     
+  else:
+    echo "Recipe not found"
