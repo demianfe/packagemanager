@@ -69,11 +69,16 @@ proc loadDependenciesGraph(recipe: RecipeRef) =
   #given a recipe load al recipes needed to compile
   for dep in recipe.dependencies:
     let dependedRecipe = findRecipe(dep)
-    
-    echo dependedRecipe
-    if len(dependedRecipe.dependencies) > 0:
-      echo "loading depencies for recipe $program $version" % ["program",recipe.program, "version", recipe.version]
-      loadDependenciesGraph(dependedRecipe)
+    if not isNil dependedRecipe:
+      if len(dependedRecipe.dependencies) > 0:
+        echo "loading depencies for recipe $program $version" % ["program",
+                                                                recipe.program,
+                                                                "version",
+                                                                recipe.version]
+        loadDependenciesGraph(dependedRecipe)
+      else:
+        echo "Recipe not found for $1 version: $2" % [dependedRecipe.program,
+                                                      dependedRecipe.version]
           
 proc compile*(program: string, version: string) =
   #load all recipes from dependencies list to a seq

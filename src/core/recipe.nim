@@ -1,6 +1,6 @@
 import os, strtabs, strutils, osproc, tables
 import xmltree, httpclient, htmlparser, parsecfg
-import streams, algorithm
+import streams, algorithm, sequtils
 
 import ../utils/configuration
 import ../utils/file
@@ -15,6 +15,7 @@ type
     version*: string
     operator*: string
     flags*: seq[string]
+    excludedVersions* : seq[string]
 
 #recipe sections and their values
 #type for the Recipe itself to be passed around
@@ -49,11 +50,38 @@ proc parseDependencies(dependenciesString: string): seq[Dependency] =
   let depLen = len(dependenciesLines)
   var dependencies: seq[Dependency]
   newSeq(dependencies, 0)
-  for depLine in dependenciesLines:
+  for line in dependenciesLines:
+    var dep = Dependency()
+    # GCC >= 4.2, != 4.3.2
+    # gcc >= 4.2 but not 4.3.2
+    var depLine = line.strip()
+    if depLine.find("#") != -1:
+      # dependency lines may contain comments
+      # ignore everything that is after `#`
+      depLine = depLine.substr(0, line.find("#") - 1)
+    # use flags section
+    # find `[` and `]` and make a list with everything
+    # that is inside brackets separated by comma
+    if depLine.find("[") != -1 and depLine.find("]") != -1:
+      var useFlagsLine = depLine.substr(depLine.find("["), depLine.find("]"))
+      useFlagsLine = useFlagsLine.replace("[","").replace("]", "")
+      dep.flags = useFlagsLine.split(",")
+      # remove this processed section so it does not interfere in further processing
+      depLine = depLine.substr(0, line.find("[") - 1)
+      depLine = depLine.substr(0, line.find("]") - 1)
     if depLine.len > 0:
       if depLine.find(" ") != -1:
+        # version exclusion section
+        if depLine.contains("!="): #depLine.find(",") != -1:
+          # excluded versions are separated by comma and after operator `!=`
+          if isNil dep.excludedVersions:
+            dep.excludedVersions = @[]
+          var exLine = split(depLine, "!=")
+          exLine.delete(0)
+          dep.excludedVersions = map(exLine, proc(x: string): string = x.strip())
+          # remove from the comma onwards
+          depLine = depLine.substr(0, line.find(",") - 1)
         let splitLine = split(depLine, " ")
-        var dep = Dependency()
         dep.program = splitLine[0]
         if depLine.find("<") != -1 or depLine.find(">") != -1 or depLine.find("=") != -1:
           #contains operator
@@ -61,8 +89,6 @@ proc parseDependencies(dependenciesString: string): seq[Dependency] =
           dep.version = splitLine[2]
         else:
           dep.version = splitLine[1]
-        #TODO: handle useflgs
-        #dep. = splitLine[3]
         dependencies.add(dep)
   return dependencies
 
@@ -243,7 +269,7 @@ proc findRecipeUrl(program:string, operator:string, versionStr: string): Preferr
   var client = newHttpClient()
   let response = client.get(recipeStoreURL)
   let html = parseHtml(newStringStream(response.body))
- 
+
   for a in html.findAll("a"):
     let href = a.attrs["href"]
     if not href.isNil:

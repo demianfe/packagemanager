@@ -1,4 +1,5 @@
-#procs that help package version handling
+# procs that help package version handling
+# TODO: handle excluded versions
 import tables, sequtils, algorithm, strutils
 
 type
@@ -93,9 +94,6 @@ proc removeRevision(versions: Table[string, string]): Table[string, string] =
   return result
 
 proc findPreferedVersion*(version: string, operator: string, versions: Table[string, string]): PreferredVersion =
-  let bestMatch = findVersion(version, operator, versions)
-  echo "BEST MACH ---> $1" % bestMatch
-  
+  let bestMatch = findVersion(version, operator, versions)  
   let path = versions[bestMatch]
   return (bestMatch, path)
-
