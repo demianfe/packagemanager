@@ -93,8 +93,18 @@ proc removeRevision(versions: Table[string, string]): Table[string, string] =
     result.add(newKey, versions[key])
   return result
 
-proc findPreferedVersion*(version: string, operator: string, versions: Table[string, string]): PreferredVersion =
+proc findPreferedVersion*(versionStr: string, operator: string, versions: Table[string, string]): PreferredVersion =
   try:
+    var version = versionStr
+    
+    if versionStr.isAlphaNumeric():
+      #temporary dirty hack
+      #just use the version as it comes
+      if versions.hasKey(version):
+        return (version, versions[version])
+    #   #removes letters
+    #   version = version.strip(chars=Letters)
+      
     let bestMatch = findVersion(version, operator, versions)  
     let path = versions[bestMatch]
     return (bestMatch, path)
