@@ -3,7 +3,7 @@ import strutils
 
 import ../src/core/compile
 
-proc testCompile() =
+proc testCompile() =  
   when declared(commandLineParams):
     # Use commandLineParams() here
     var arguments: seq[string] = @[]
@@ -15,8 +15,12 @@ proc testCompile() =
         compileParams.add(param)
       #expectedly first compileparams should be the program to compile
       #and the seccond should be its version
-    echo compileParams[0] & " = "  & compileParams[1]
-    compile(compileParams[0], compileParams[1])
+    if len(compileParams) >= 2:
+      echo compileParams[0] & " = "  & compileParams[1]
+      compile(compileParams[0], compileParams[1])
+    else:
+      echo compileParams[0]
+      compile(compileParams[0], nil)
    
   else:
     # Do something else!

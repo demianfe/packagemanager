@@ -40,22 +40,29 @@ proc compareVersions(v1: string, operator: string, v2: string): string =
   var a = map(v1.split("."), proc(x: string): int = parseInt(x))
   let b = map(v2.split("."), proc(x: string): int = parseInt(x))
   var i = 0
+  #echo "Comparing $1 $2 $3" % [v1, operator, v2]
   var maxLength = len(a)
   #use the shortest array as max
   if maxLength > len(b): maxLength = len(b)
-  while i < maxLength:
-    if a[i] == b[i]:
-      #compare versions with the reset of the sequence
-      let newA = a[(i + 1)..len(a) - 1].join(".")
-      let newB = b[(i + 1)..len(b) - 1].join(".")
-      if(newA == newB): return v1
-      let r  = compareVersions($newA, operator, $newB)
-      return "$1.$2" % [$a[i], r]
-    elif intComparator(a[i], operator, b[i]) == -1:
-      return b.join(".")
-    elif intComparator(a[i], operator, b[i]) == 1:
-      return a.join(".")
-    i += 1
+  try:
+    while i < maxLength:
+      if a[i] == b[i]:
+        #compare versions with the reset of the sequence
+        let newA = a[(i + 1)..len(a) - 1].join(".")
+        let newB = b[(i + 1)..len(b) - 1].join(".")
+        if(newA == newB): return v1
+        let r  = compareVersions($newA, operator, $newB)
+        return "$1.$2" % [$a[i], r]
+      elif intComparator(a[i], operator, b[i]) == -1:
+        return b.join(".")
+      elif intComparator(a[i], operator, b[i]) == 1:
+        return a.join(".")
+      i += 1
+  except:
+    echo "$1 $2 $3" % [v1, operator, v2]
+    writeStackTrace()
+    quit(-1)
+    #raise newException(Error)
 
 proc findGreatestOrEqual(srcTarget: string, versions: Table[string, string]): string =
   var target = srcTarget
@@ -69,7 +76,7 @@ proc findGreatestOrEqual(srcTarget: string, versions: Table[string, string]): st
 
 proc findVersion(target: string, operator: string, versionsTable: Table[string, string]): string =
   if (operator == "<=" or operator == "=") and versionsTable.hasKey(target):
-    return versionsTable[target]
+    return target
   elif operator == "<":
     var result = ""
     var smallerTable = initTable[string, string]()
@@ -84,7 +91,7 @@ proc findVersion(target: string, operator: string, versionsTable: Table[string, 
     if not isNil foundVersion:
        return foundVersion
     else:
-      echo "Best matching version not found for recipe $1 $2" % [operator, target]
+      echo "No best matching version found for recipe $1 $2" % [operator, target]
 
 proc removeRevision(versions: Table[string, string]): Table[string, string] =
   var result = initTable[string, string]()
@@ -96,17 +103,15 @@ proc removeRevision(versions: Table[string, string]): Table[string, string] =
 proc findPreferedVersion*(versionStr: string, operator: string, versions: Table[string, string]): PreferredVersion =
   try:
     var version = versionStr
-    
     if versionStr.isAlphaNumeric():
       #temporary dirty hack
       #just use the version as it comes
       if versions.hasKey(version):
         return (version, versions[version])
-    #   #removes letters
-    #   version = version.strip(chars=Letters)
-      
+    if len(version) == 1: version = version & ".0"
     let bestMatch = findVersion(version, operator, versions)  
     let path = versions[bestMatch]
+    echo "Best match is $1 : $2" % [bestMatch, path]
     return (bestMatch, path)
   except:
     for key in versions.keys():

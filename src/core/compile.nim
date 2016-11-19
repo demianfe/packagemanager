@@ -1,5 +1,5 @@
 import os, osproc, tables, strutils, parsecfg
-import recipe, recipespecs
+import recipe, recipespecs, algorithm
 
 import ../utils/configuration
 import ../utils/file
@@ -7,7 +7,7 @@ import ../utils/file
 #initialize configuration
 let conf = readConfiguration()
 
-proc prepareInstall(recipe: Recipe): string = 
+proc prepareInstall(recipe: RecipeRef): string = 
   #create $programsPath/recpe.program/recipe.version
   let programsPath = conf.getSectionValue("compile","programsPath")
   let target = "$programsPath/$program/$version" % ["programsPath", programsPath,
@@ -18,14 +18,14 @@ proc prepareInstall(recipe: Recipe): string =
   return target
   
 ### make file
-proc buildTypeMakeFile(recipe: Recipe, path: string) =
+proc buildTypeMakeFile(recipe: RecipeRef, path: string) =
   #TODO: handle unmanaged files
   setCurrentDir(path)
   echo execProcess("make")
   echo execProcess("make install")
 
 ### build type section
-proc buildTypeConfigure(recipe: Recipe, path: string) =
+proc buildTypeConfigure(recipe: RecipeRef, path: string) =
   #TODO: replace variables
   #read/load all configuration/installation parameters   
   #check if it uses autogen.sh
@@ -39,22 +39,26 @@ proc buildTypeConfigure(recipe: Recipe, path: string) =
   setCurrentDir(path)
   if existsFile(path & command):
     echo execProcess("chmod +x $file ") % ["file", path & command]
-    
-  for option in recipe.configurations["configure_options"]:  
-    command = command & " " & conf.replaceValues(option)
-
+  if recipe.configurations.hasKey("configure_options"):
+    for option in recipe.configurations["configure_options"]:
+      command = command & " " & conf.replaceValues(option)
   command = "./" & command
   echo execProcess(command)
  
-proc compileProgram(recipe: Recipe) =
+proc compileProgram(recipe: RecipeRef) =
     let packagesDir = conf.getSectionValue("compile","packagesPath")
     let archivesPath = conf.getSectionValue("compile","archivesPath")
-    let splitUrl = rsplit(recipe.url,"/")
+    var url = recipe.url
+    if isNil url:
+      url = recipe.configurations["urls"][0]
+      
+    let splitUrl = rsplit(url,"/")
     let fileName = splitUrl[len(splitUrl) - 1]
     var filePath = packagesDir & "/" & fileName
-    
+    echo ("path ",filePath)
+    echo ("filename ", fileName)
     if not checkFile(filePath, recipe.file_size, recipe.file_md5):
-      filePath = localDownloadFile(recipe.url, filename)
+      filePath = localDownloadFile(url, filePath)
     discard unpackFile(filePath, archivesPath)
     #compile
     #call the correct recipeType compile procedure
@@ -66,41 +70,47 @@ proc compileProgram(recipe: Recipe) =
       buildTypeMakeFile(recipe, unpackedDir)
 
 proc loadDependencies(recipe: RecipeRef,
-                      recipesTable: var Table[string, RecipeRef]):
-                      Table[string, RecipeRef] =
+                      recipesTable: var OrderedTable[string, RecipeRef]):
+                      OrderedTable[string, RecipeRef] =
   #given a recipe load al recipes needed to compile
   for dep in recipe.dependencies:
     # hash the name+version ?
-    echo dep.program&dep.version
     let recipeKey = dep.program&dep.version
-    if not recipesTable.hasKey(recipeKey):  
-      let dependedRecipe = findRecipe(dep)
+    let dependedRecipe = findRecipe(dep)
+    if not recipesTable.hasKey(recipeKey):
       recipesTable.add(recipeKey, dependedRecipe)
-      #echo recipesTable
-      if not isNil dependedRecipe:
-        if len(dependedRecipe.dependencies) > 0:
-          echo "loading depencies for recipe $program $version" % ["program",
-                                                                recipe.program,
-                                                                "version",
-                                                                recipe.version]
-          recipesTable = loadDependencies(dependedRecipe, recipesTable)
-        else:
-          echo "Recipe not found for $1 version: $2" % [dependedRecipe.program,
+    if not isNil dependedRecipe:
+      if len(dependedRecipe.dependencies) > 0:
+        echo "Loading depencies for recipe $1 version: $2" % [recipe.program, recipe.version]
+        recipesTable = loadDependencies(dependedRecipe, recipesTable)
+      else:
+        echo "Recipe not found for $1 version: $2" % [dependedRecipe.program,
                                                       dependedRecipe.version]
-          
+  return recipesTable
+
 proc compile*(program: string, version: string) =
   #load all recipes from dependencies list to a seq
   #iterate and compile each item
-  var recipe: RecipeRef = findRecipe(program, version)
-  # A table holding all recipes that need to be installed
-  # inculding dependencies
-  # the key is program+version so it will install each program only once
-  var recipes: Table[string, RecipeRef] = inittable[string, RecipeRef]()
+  var recipe: RecipeRef
+  var recipes: OrderedTable[string, RecipeRef] = initOrderedTable[string, RecipeRef]()
+  if isNil version:
+    recipe = findRecipe(program, ">", "0.0")
+  else:
+    recipe = findRecipe(program, "=", version)
+
+  recipes.add(recipe.program&recipe.version, recipe)
+  
   if not isNil recipe:
     #TODO: check if $Program/$version is already installed
-    #iterate over the dependencies of the dependencies... 
+    #iterate over the dependencies of the dependencies...
     recipes = loadDependencies(recipe, recipes)
-    echo recipes
-     
+    #reverse order of compilation
+    var keySeq: seq[string] = @[]
+    for key in recipes.keys():
+      keySeq.add(key)
+    for key in keySeq.reversed():
+      let currentRecipe = recipes[key]
+      echo "Compiling $1 $2"  % [currentRecipe.program, currentRecipe.version]
+      compileProgram(currentRecipe)
   else:
     echo "Recipe not found"
