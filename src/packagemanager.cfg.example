@@ -7,12 +7,17 @@
 $root = "/" # root directory
 $depot = "$root/Depot"
 programs = "$root/Programs" #all programs are installed here
+debug = true #true or false
+cachedRecipeStore = "$depot/Resources/index.html"
 
 [compile]
 packagesPath = "$root/Packages" #where the compressed packages are saved
 archivesPath = "$depot/Archives" #compressed packages are stored here
+programsPath = "$root/Programs"
 packagedRecipesPath = "$depot/PackagedRecipes"
 localRecipesPath = "$depot/LocalRecipes"
 sourcesPath = "$depot/Sources"#where the packages will be extracted
 recipeStores = "http://gobolinux.org/recipe-store"
 
+[repository]
+ftpGnu = "ftp://ftp.gnu.org/gnu"

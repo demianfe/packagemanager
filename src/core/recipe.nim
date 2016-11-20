@@ -226,6 +226,7 @@ proc findRecipeURL(programName:string, version: string): string =
     
 proc downloadAndExtractRecipe(url: string) = 
   var path = conf.getSectionValue("compile","packagedRecipesPath")
+  
   let fileName = url.substr(url.rfind("/"), len(url) - 1)
   path = "$1$2" % [path, fileName]
   let filePath = localDownloadFile(url, path)
@@ -274,9 +275,14 @@ proc findRecipeUrl(program:string, operator:string, versionStr: string): Preferr
   var programVersions: seq[string] = @[]
   let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
   # TODO: download recipe store file only once
-  var client = newHttpClient()
-  let response = client.get(recipeStoreURL)
-  let html = parseHtml(newStringStream(response.body))
+  var html: XmlNode
+  echo conf.getSectionValue("main", "debug")
+  if conf.getSectionValue("main", "debug") != "true":
+    var client = newHttpClient()
+    let response = client.get(recipeStoreURL)
+    html = parseHtml(newStringStream(response.body))
+  else:
+     html = loadHtml(conf.getSectionValue("main", "cachedRecipeStore"))
   
   for a in html.findAll("a"):
     let href = a.attrs["href"]

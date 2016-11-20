@@ -106,6 +106,9 @@ proc findPreferedVersion*(versionStr: string, operator: string, versions: Table[
     if versionStr.isAlphaNumeric():
       #temporary dirty hack
       #just use the version as it comes
+      echo "version is aplhanumeric"
+      echo version
+      echo "-------------------"
       if versions.hasKey(version):
         return (version, versions[version])
     if len(version) == 1: version = version & ".0"
