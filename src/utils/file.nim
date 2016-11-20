@@ -4,14 +4,14 @@ import checkmd5
   
 proc localDownloadFile*(url: string, path: string, timeout=60000): string =
   #returns the final destination
-  downloadFile(url, path, timeout=60000)
+  downloadFile(url, path, timeout=90000)
   return path
 
 proc localDownloadFile*(url: string, path: string, fileName: string, timeout=6000000): string =
   #returns the final destination
   let output = "$path/$fileName" % ["path", path,
                                     "fileName", fileName]
-  downloadFile(url, output, timeout=60000)
+  downloadFile(url, output, timeout=90000)
   return output
   
 proc unpackFile*(packagePath: string, targetDir: string): string =

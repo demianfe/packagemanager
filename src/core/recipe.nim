@@ -276,7 +276,6 @@ proc findRecipeUrl(program:string, operator:string, versionStr: string): Preferr
   let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
   # TODO: download recipe store file only once
   var html: XmlNode
-  echo conf.getSectionValue("main", "debug")
   if conf.getSectionValue("main", "debug") != "true":
     var client = newHttpClient()
     let response = client.get(recipeStoreURL)

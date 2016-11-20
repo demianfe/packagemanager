@@ -1,6 +1,7 @@
 # procs that help package version handling
 # TODO: handle excluded versions
 import tables, sequtils, algorithm, strutils
+import re
 
 type
   PreferredVersion* = tuple[version: string, path: string]
@@ -37,10 +38,9 @@ proc intComparator(a: int, operator: string, b: int): SomeSignedInt =
 
 proc compareVersions(v1: string, operator: string, v2: string): string =
   #compare a sequence of int values using intComparator
-  var a = map(v1.split("."), proc(x: string): int = parseInt(x))
+  let a = map(v1.split("."), proc(x: string): int = parseInt(x))
   let b = map(v2.split("."), proc(x: string): int = parseInt(x))
   var i = 0
-  #echo "Comparing $1 $2 $3" % [v1, operator, v2]
   var maxLength = len(a)
   #use the shortest array as max
   if maxLength > len(b): maxLength = len(b)
@@ -100,18 +100,20 @@ proc removeRevision(versions: Table[string, string]): Table[string, string] =
     result.add(newKey, versions[key])
   return result
 
-proc findPreferedVersion*(versionStr: string, operator: string, versions: Table[string, string]): PreferredVersion =
+proc removeNonFloat(versionStr: string): string =
+  versionStr.replace(re"[^0-9.]+")
+  
+proc findPreferedVersion*(versionStr: string, operator: string,
+                          versionsTable: Table[string, string]): PreferredVersion =
+  var versions = versionsTable
   try:
-    var version = versionStr
-    if versionStr.isAlphaNumeric():
-      #temporary dirty hack
-      #just use the version as it comes
-      echo "version is aplhanumeric"
-      echo version
-      echo "-------------------"
-      if versions.hasKey(version):
-        return (version, versions[version])
-    if len(version) == 1: version = version & ".0"
+    var version = removeNonFloat(versionStr)
+    for key in versions.keys():
+      # remove letters from versions, just ignore them for now
+      let newKey = removeNonFloat(key)
+      versions.add(newKey, versions[key])
+      versions.del(key)
+      
     let bestMatch = findVersion(version, operator, versions)  
     let path = versions[bestMatch]
     echo "Best match is $1 : $2" % [bestMatch, path]
