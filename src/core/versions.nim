@@ -51,6 +51,7 @@ proc compareVersions(v1: string, operator: string, v2: string): string =
         let newA = a[(i + 1)..len(a) - 1].join(".")
         let newB = b[(i + 1)..len(b) - 1].join(".")
         if(newA == newB): return v1
+        if maxLength == 1: return v1
         let r  = compareVersions($newA, operator, $newB)
         return "$1.$2" % [$a[i], r]
       elif intComparator(a[i], operator, b[i]) == -1:
