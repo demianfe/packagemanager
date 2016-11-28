@@ -1,5 +1,5 @@
-import os, osproc, tables, strutils, parsecfg
-import recipe, recipespecs, algorithm, logging
+import os, osproc, tables, strutils, parsecfg, sequtils
+import recipe, algorithm, logging
 
 import ../utils/configuration
 import ../utils/file
@@ -11,82 +11,94 @@ var fileLogger = newFileLogger("test/test.log", fmtStr = verboseFmtStr)
 var consoleLogger = newConsoleLogger()
 addHandler(fileLogger)
 
+proc buildFail(recipe: RecipeRef, target: string) =
+  echo "Removing $1 " % target
+  echo "Failed to compile $1 $2" % [recipe.program, recipe.version]
+  discard execProcess("rm -rf $1" % target)
+  writeStackTrace()
+  echo getCurrentExceptionMsg()
+  quit(-1)
+
 proc prepareInstall(recipe: RecipeRef): string = 
   #create $programsPath/recpe.program/recipe.version
-  let programsPath = conf.getSectionValue("compile","programsPath")
-  # let target = "$programsPath/$program/$version" % ["programsPath", programsPath,
-  #                                                 "program", recipe.program,
-  #                                                 "version", recipe.version]
-  let target = programsPath / recipe.program / recipe.version
-  let command = "mkdir -p $target" % ["target", target]
-  echo "Creating target dir $1" % command
-  echo execProcess(command)
+  let
+    programsPath = conf.getSectionValue("compile","programsPath")
+    target = programsPath / recipe.program / recipe.version
+  discard execProcess("rm -rf $1" % [target])
+  echo "Creating target dir $1" % [target]
+  discard execProcess("mkdir -p $1" % [target])
   return target
 
 ### build type section  
 ### makefile
-proc buildTypeMakeFile(recipe: RecipeRef, path: string) =
+proc buildTypeMakeFile(recipe: RecipeRef, path, target: string): int =
   #TODO: handle unmanaged files
   echo "path -- $1 " % path
-  setCurrentDir(path)
-  echo execProcess("make")
-  echo execProcess("make install")
+  try:
+    setCurrentDir(path)
+    var code = callCommand(command="make", workingDir=path)
+    if code != 0:
+      buildFail(recipe, target)
+      return code
+    code = callCommand(command="make", workingDir=path, args=["install"])
+    if code != 0:
+      buildFail(recipe, target)
+      return code
+  except OSError:
+    buildFail(recipe, target)
 
-proc buildTypeConfigure(recipe: RecipeRef, path: string) =
+proc buildTypeConfigure(recipe: RecipeRef, path, target: string) =
   #TODO: replace variables
   #read/load all configuration/installation parameters   
   #check if it uses autogen.sh
   #change ./configure mode to +x
   #check "$needs_build_directory" = "yes" this builds in another directory (?)
-  let
-    programsPath = conf.getSectionValue("compile","programsPath")
-    target = prepareInstall(recipe)
-    ctarget = "--prefix=$target" % ["target", target]
+  let programsPath = conf.getSectionValue("compile","programsPath")
+  let prefix = "--prefix=$target" % ["target", target]
   var command = "./configure"
+  var args = newSeq[string]()
   #verify that ./configure exists
-  echo "Changing dir to " & path 
-  setCurrentDir(path)
-  var args = @[target]
-  if existsFile(path & command):
-    echo execProcess("chmod +x $file") % ["file", path & command]
-  if recipe.configurations.hasKey("configure_options"):
-    for option in recipe.configurations["configure_options"]:
-      args.add(conf.replaceValues(option))
-  command = "."  / command
-  let resultCode = callCommand(command=command, workingDir=path, args=args)
-  if resultCode == -1:
-    #remove created
-    echo "excuting rm -rf $target" % target
-    #execProcess("rm -rf $target" % target)
-    echo "Failed to compile $1 $2" % [recipe.program, recipe.version]
-    quit(-1)
+  try:
+    echo "Changing dir to " & path
+    setCurrentDir(path)
+    if existsFile(path & command):
+      echo execProcess("chmod +x $file") % ["file", path & command]
+    if recipe.configurations.hasKey("configure_options"):
+      args = recipe.configurations["configure_options"]
+    # `args.add(prefix)` does not work here, why?
+    args.insert(prefix)
+    let resultCode = callCommand(command=command, workingDir=path, args=args)
+    if resultCode != 0:
+      buildFail(recipe, target)
+  except OSError:
+    buildFail(recipe, target)
  
 proc compileProgram(recipe: RecipeRef) =
   let packagesDir = conf.getSectionValue("compile","packagesPath")
   let archivesPath = conf.getSectionValue("compile","archivesPath")
   var url = recipe.url
+  
   if isNil url:
+    #TODO: iterate over urls
     url = recipe.configurations["urls"][0]
 
   let splitUrl = rsplit(url,"/")
   let fileName = splitUrl[len(splitUrl) - 1]
-  var filePath = packagesDir & "/" & fileName
+  var filePath = packagesDir / fileName
   if not checkFile(filePath, recipe.file_size, recipe.file_md5):
     filePath = localDownloadFile(url, packagesDir, fileName)
-    var p = unpackFile(filePath, archivesPath)
-    #call the correct recipeType compile procedure
+  var p = unpackFile(filePath, archivesPath)
+  #call the correct recipeType compile procedure
+  let target = prepareInstall(recipe)
   if recipe.recipe_type.cmpIgnoreCase("configure") == 0:
     var unpackedDir = fileName.rsplit("-" & recipe.version)[0]
     #improve this wild guessing
-    unpackedDir = archivesPath / unpackedDir
-    #TODO: do something with the with the output
-    discard unpackedDir
-    buildTypeConfigure(recipe, unpackedDir)
-    # buildTypeMakeFile(recipe, unpackedDir)
+    unpackedDir = archivesPath / unpackedDir & "-" & recipe.version
+    buildTypeConfigure(recipe, unpackedDir, target)
+    var code = buildTypeMakeFile(recipe, unpackedDir, target)
 
 proc loadDependencies(recipe: RecipeRef, recipes: var OrderedTable[string, RecipeRef]):
                      OrderedTable[string, RecipeRef] =
-  
   for d in recipe.dependencies:
     echo "Looking recipe for $1 $1" % [d.program, d.version]
     var r = findRecipe(d)

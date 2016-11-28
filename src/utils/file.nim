@@ -14,9 +14,9 @@ proc callCommand*(command:string, workingDir: string = "", args: openArray[strin
   #convient way to call startProcess and handle output
   let options: set[ProcessOption] = {poUsePath, poStdErrToStdOut}
   var p = startProcess(command=command,
-                         workingDir=workingDir,
-                         args=args,
-                         options=options)
+                       workingDir=workingDir,
+                       args=args,
+                       options=options)
   var
     pStdout = p.outputStream()
     line: TaintedString = ""
@@ -48,10 +48,8 @@ proc unpackFile*(packagePath, targetDir: string): int =
   let
     command = which "tar"
     options: set[ProcessOption] = {poUsePath, poStdErrToStdOut}
-    args = @["xf", packagePath, "-C", "targetDir"]
-  let p = startProcess(command)
-  waitForExit(p, 90000)
-  #return execProcess(unpackCommand)
+    args = @["xf", packagePath, "-C", targetDir]
+  callCommand(command=command, workingDir=targetDir, args)
 
 proc checkFile*(path: string, size: BiggestInt, md5: string): bool = 
   if existsFile(path):
