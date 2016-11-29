@@ -35,22 +35,21 @@ proc download(url, destination: string): int =
 proc localDownloadFile*(url, path: string, timeout=6000000): string {.deprecated.} =
   echo "downloading $1" % [url]
   echo download(url, path)
-  #downloadFile(url, output, timeout=90000)
   return path
 
 proc localDownloadFile*(url, path, filename: string, timeout=6000000): string {.deprecated.}=
   echo "Downloading $1 into $2" % [url, path]
   discard download(url, path)
-  #downloadFile(url, output, timeout=90000)
   return path / filename
-  
+
 proc unpackFile*(packagePath, targetDir: string): int =
   let
     command = which "tar"
     options: set[ProcessOption] = {poUsePath, poStdErrToStdOut}
-    args = @["xf", packagePath, "-C", targetDir]
+    args = @["xf", packagePath, "-C", targetDir, "--strip-components=1"]
+  discard execProcess("mkdir -p $1" % targetDir)
   callCommand(command=command, workingDir=targetDir, args)
-
+  
 proc checkFile*(path: string, size: BiggestInt, md5: string): bool = 
   if existsFile(path):
     let fileInfo: FileInfo = getFileInfo(path)

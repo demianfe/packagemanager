@@ -11,7 +11,7 @@ var fileLogger = newFileLogger("test/test.log", fmtStr = verboseFmtStr)
 var consoleLogger = newConsoleLogger()
 addHandler(fileLogger)
 
-proc buildFail(recipe: RecipeRef, target: string) =
+fproc buildFail(recipe: RecipeRef, target: string) =
   echo "Removing $1 " % target
   echo "Failed to compile $1 $2" % [recipe.program, recipe.version]
   discard execProcess("rm -rf $1" % target)
@@ -81,19 +81,18 @@ proc compileProgram(recipe: RecipeRef) =
   if isNil url:
     #TODO: iterate over urls
     url = recipe.configurations["urls"][0]
-
   let splitUrl = rsplit(url,"/")
   let fileName = splitUrl[len(splitUrl) - 1]
   var filePath = packagesDir / fileName
   if not checkFile(filePath, recipe.file_size, recipe.file_md5):
     filePath = localDownloadFile(url, packagesDir, fileName)
-  var p = unpackFile(filePath, archivesPath)
+  var unpackedDir = fileName.rsplit("-" & recipe.version)[0]
+  #improve this wild guessing
+  unpackedDir = archivesPath / unpackedDir & "-" & recipe.version
+  var p = unpackFile(filePath, unpackedDir)
   #call the correct recipeType compile procedure
   let target = prepareInstall(recipe)
   if recipe.recipe_type.cmpIgnoreCase("configure") == 0:
-    var unpackedDir = fileName.rsplit("-" & recipe.version)[0]
-    #improve this wild guessing
-    unpackedDir = archivesPath / unpackedDir & "-" & recipe.version
     buildTypeConfigure(recipe, unpackedDir, target)
     var code = buildTypeMakeFile(recipe, unpackedDir, target)
 
