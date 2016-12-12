@@ -11,7 +11,7 @@ var fileLogger = newFileLogger("test/test.log", fmtStr = verboseFmtStr)
 var consoleLogger = newConsoleLogger()
 addHandler(fileLogger)
 
-fproc buildFail(recipe: RecipeRef, target: string) =
+proc buildFail(recipe: RecipeRef, target: string) =
   echo "Removing $1 " % target
   echo "Failed to compile $1 $2" % [recipe.program, recipe.version]
   discard execProcess("rm -rf $1" % target)
@@ -36,11 +36,11 @@ proc buildTypeMakeFile(recipe: RecipeRef, path, target: string): int =
   echo "path -- $1 " % path
   try:
     setCurrentDir(path)
-    var code = callCommand(command="make", workingDir=path)
+    var (code, output) = callCommand(command="make", workingDir=path)
     if code != 0:
       buildFail(recipe, target)
       return code
-    code = callCommand(command="make", workingDir=path, args=["install"])
+    (code, output) = callCommand(command="make", workingDir=path, args=["install"])
     if code != 0:
       buildFail(recipe, target)
       return code
@@ -52,12 +52,14 @@ proc buildTypeConfigure(recipe: RecipeRef, path, target: string) =
   #read/load all configuration/installation parameters   
   #check if it uses autogen.sh
   #change ./configure mode to +x
-  #check "$needs_build_directory" = "yes" this builds in another directory (?)
   let programsPath = conf.getSectionValue("compile","programsPath")
   let prefix = "--prefix=$target" % ["target", target]
+  var buildPath = path
   var command = "./configure"
+  if recipe.properties.contains("needs_build_directory") and recipe.properties["needs_build_directory"] == "yes":
+    buildPath = path / "build"
+    command = ".$1" % command
   var args = newSeq[string]()
-  #verify that ./configure exists
   try:
     echo "Changing dir to " & path
     setCurrentDir(path)
@@ -67,29 +69,32 @@ proc buildTypeConfigure(recipe: RecipeRef, path, target: string) =
       args = recipe.configurations["configure_options"]
     # `args.add(prefix)` does not work here, why?
     args.insert(prefix)
-    let resultCode = callCommand(command=command, workingDir=path, args=args)
+    let (resultCode, output) = callCommand(command=command, workingDir=buildPath, args=args)
     if resultCode != 0:
       buildFail(recipe, target)
   except OSError:
     buildFail(recipe, target)
  
 proc compileProgram(recipe: RecipeRef) =
-  let packagesDir = conf.getSectionValue("compile","packagesPath")
-  let archivesPath = conf.getSectionValue("compile","archivesPath")
+  let
+    packagesDir = conf.getSectionValue("compile","packagesPath")
+    archivesPath = conf.getSectionValue("compile","archivesPath")
   var url = recipe.url
   
   if isNil url:
     #TODO: iterate over urls
     url = recipe.configurations["urls"][0]
-  let splitUrl = rsplit(url,"/")
-  let fileName = splitUrl[len(splitUrl) - 1]
+  url = url.replace("\"","")
+  let
+    splitUrl = rsplit(url,"/")
+    fileName = splitUrl[len(splitUrl) - 1].replace("\"","")
   var filePath = packagesDir / fileName
   if not checkFile(filePath, recipe.file_size, recipe.file_md5):
-    filePath = localDownloadFile(url, packagesDir, fileName)
+    let (code, output) = download(url, packagesDir, fileName)
   var unpackedDir = fileName.rsplit("-" & recipe.version)[0]
   #improve this wild guessing
   unpackedDir = archivesPath / unpackedDir & "-" & recipe.version
-  var p = unpackFile(filePath, unpackedDir)
+  var p = unpackFile(filePath, archivesPath)
   #call the correct recipeType compile procedure
   let target = prepareInstall(recipe)
   if recipe.recipe_type.cmpIgnoreCase("configure") == 0:
@@ -100,7 +105,13 @@ proc loadDependencies(recipe: RecipeRef, recipes: var OrderedTable[string, Recip
                      OrderedTable[string, RecipeRef] =
   for d in recipe.dependencies:
     echo "Looking recipe for $1 $1" % [d.program, d.version]
-    var r = findRecipe(d)
+    var r = findRecipe(d.program, d.version)
+    if isNil r:
+      echo "Recipe cannot be nil at this point."
+      echo "Failed to find recipe $1 $2" % [d.program, d.version]
+      writeStackTrace()
+      echo getCurrentExceptionMsg()
+      quit(-1)
     recipes.add(r.program, r)
   return recipes
 

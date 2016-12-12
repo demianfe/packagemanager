@@ -1,5 +1,19 @@
 import os, osproc, strutils, strtabs, httpclient, checkmd5, streams
 
+proc extractFilename*(url: string): string  =
+  let
+    splitUrl = rsplit(url,"/")
+    fileName = splitUrl[len(splitUrl) - 1]
+  return filename
+
+proc correctPath*(dir, target: string): string =
+  # looks for the exactMatching folder or file
+  # ignoring case sensitivity
+  for entry in walkDir(dir):
+    let targetPath = dir / target
+    if entry.path.cmpIgnoreCase(targetPath) == 0:
+      return entry.path
+
 proc which*(command: string): string =
   #finds the command in path
   for dir in getEnv("PATH").split(":"):
@@ -10,9 +24,11 @@ proc which*(command: string): string =
           if pathParts[len(pathParts) - 1] == command:
             return commandPath.path
 
-proc callCommand*(command:string, workingDir: string = "", args: openArray[string] = []): int =
+proc callCommand*(command:string, workingDir: string = "",
+                  args: openArray[string] = []): (int, seq[string]) =
   #convient way to call startProcess and handle output
-  let options: set[ProcessOption] = {poUsePath, poStdErrToStdOut}
+  let options: set[ProcessOption] = {poEchoCmd, poUsePath, poStdErrToStdOut}
+  var result: seq[string] = @[]
   var p = startProcess(command=command,
                        workingDir=workingDir,
                        args=args,
@@ -20,16 +36,28 @@ proc callCommand*(command:string, workingDir: string = "", args: openArray[strin
   var
     pStdout = p.outputStream()
     line: TaintedString = ""
+    outLines: seq[string] = @[]
   while p.peekExitCode == -1:
     if readLine(pStdout, line):
       echo line
+      outLines.add(line)
   echo "Exiting with code $1" % $p.peekExitCode
   p.close
-  return p.peekExitCode
+  if p.peekExitCode != 0:
+    echo outLines
+    writeStackTrace()
+    quit(-1)
+  return (p.peekExitCode, outLines)
   
-proc download(url, destination: string): int =
+proc download*(url, destination: string, filename: string=nil): (int, seq[string])  =
   let command = which "wget"
-  return callCommand(command=command, workingDir=destination, args=[url])
+  var args: seq[string]
+  if not isNil filename:
+    let fileDestination: string = destination / filename
+    args = @["-O", fileDestination, url]
+  else:
+    args = @[url]  
+  return callCommand(command=command, workingDir=destination, args=args)
 
 #depreacte
 proc localDownloadFile*(url, path: string, timeout=6000000): string {.deprecated.} =
@@ -41,13 +69,12 @@ proc localDownloadFile*(url, path, filename: string, timeout=6000000): string {.
   echo "Downloading $1 into $2" % [url, path]
   discard download(url, path)
   return path / filename
-
-proc unpackFile*(packagePath, targetDir: string): int =
+  
+proc unpackFile*(packagePath, targetDir: string): (int, seq[string]) =
   let
+    #TODO: take the lines from output and lookup for the file name
     command = which "tar"
-    options: set[ProcessOption] = {poUsePath, poStdErrToStdOut}
-    args = @["xf", packagePath, "-C", targetDir, "--strip-components=1"]
-  discard execProcess("mkdir -p $1" % targetDir)
+    args = @["vvxf", packagePath, "-C", targetDir]
   callCommand(command=command, workingDir=targetDir, args)
   
 proc checkFile*(path: string, size: BiggestInt, md5: string): bool = 

@@ -116,7 +116,8 @@ proc parseRecipe(strFile: string): RecipeRef =
     #this code may be too general
     if currentLine.len > 0 and not currentLine.startsWith("#"):
       #replace configuration variables
-      let line = conf.replaceValues(currentLine).replace("\"","")
+      let line = currentLine
+      #let line = conf.replaceValues(currentLine).replace("\"","")
       #parses the recipe pairs of key=value attributes
       if (line.count("=") == 1) and (line.find("(") == -1) and
         (line.find(")") == -1) and prevFunc == false and prevConf == false:
@@ -210,9 +211,13 @@ proc findRecipeURL(programName:string, version: string): string =
   #looks for a recipe in the recipe store 
   echo "Looking for recipe $program version $version" % ["program", programName, "version", version]
   let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
-  var client = newHttpClient()
-  let response = client.get(recipeStoreURL)
-  let html = parseHtml(newStringStream(response.body))
+  var html: XmlNode
+  if conf.getSectionValue("main", "debug") != "true":
+    var client = newHttpClient()
+    let response = client.get(recipeStoreURL)
+    html = parseHtml(newStringStream(response.body))
+  else:
+     html = loadHtml(conf.getSectionValue("main", "cachedRecipeStore"))
   var recipeUrl: string
   for a in html.findAll("a"):
     let href = a.attrs["href"]
@@ -226,11 +231,11 @@ proc findRecipeURL(programName:string, version: string): string =
     
 proc downloadAndExtractRecipe(url: string) = 
   var path = conf.getSectionValue("compile","packagedRecipesPath")
-  
-  let fileName = url.substr(url.rfind("/"), len(url) - 1)
-  path = "$1$2" % [path, fileName]
-  let filePath = localDownloadFile(url, path)
-  echo unpackFile(filePath, conf.getSectionValue("compile","localRecipesPath"))
+  let fileName = url.substr(url.rfind("/") + 1, len(url) - 1)
+  var filePath = localDownloadFile(url, path)
+  let localRecipesPath = conf.getSectionValue("compile","localRecipesPath")
+  filePath = correctPath(path, fileName)
+  echo unpackFile(filePath, localRecipesPath)
 
 proc preferredVersion(version:string, operator: string,
                       versionsTable: Table[string, string]): PreferredVersion =
@@ -281,8 +286,7 @@ proc findRecipeUrl(program:string, operator:string, versionStr: string): Preferr
     let response = client.get(recipeStoreURL)
     html = parseHtml(newStringStream(response.body))
   else:
-     html = loadHtml(conf.getSectionValue("main", "cachedRecipeStore"))
-  
+     html = loadHtml(conf.getSectionValue("main", "cachedRecipeStore"))  
   for a in html.findAll("a"):
     let href = a.attrs["href"]
     if not href.isNil:
@@ -334,6 +338,7 @@ proc findRecipe*(dependency: Dependency): RecipeRef =
     var recipe = findRecipe(dependency.program, dependency.version)
     #if the extact version is not found look for a newer version
     if isNil recipe:
+      echo "REcipe not found, looking best match."
       recipe = findRecipe(dependency.program, ">=", dependency.version)
     return recipe
   else:
