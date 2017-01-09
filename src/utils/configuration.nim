@@ -20,7 +20,7 @@ proc replaceValue(value: var string, replacementValues: OrderedTable[string, str
   for key in replacementValues.keys():
     #ignore case
     if value.toLower().find(key.toLower()) != -1:
-      presentVars.add(key.replace("$",""))
+      presentVars.add(key)
       presentVars.add(replacementValues[key])
   value = value % presentVars
   return value
@@ -61,22 +61,19 @@ proc generateReplacmentTable(dict: Config): OrderedTable[string, string] =
     for itemKey in section.keys():
       #extract the value of this item
       var value = section[itemKey]
-      #if the key contains `$` it is a replacement item
-      if itemKey.find("$") != -1:
-        #if the value contains `$` should be replaced with something
-        var count = 0
-        while value.find("$") != -1 or count < len(replacementTable):
-          value = replaceValue(value, replacementTable)
-          count += 1
-        value = value.replace("//","/")
-        replacementTable.add(itemKey, value)
+      #if the value contains `$` should be replaced with something
+      var count = 0
+      while value.find("$") != -1 or count < len(replacementTable):
+        value = replaceValue(value, replacementTable)
+        count += 1
+      value = value.replace("//","/")
+      replacementTable.add(itemKey, value)
   return replacementTable
 
 proc readConfiguration*(): Config =
   var baseDir = os.getCurrentDir() & "/src"
   var config = loadConfig(baseDir & "/packagemanager.cfg")
-  var replacementTable = generateReplacmentTable(config)
-  
+  var replacementTable = generateReplacmentTable(config)  
   for sectionKey in config.keys():
     var section = config[sectionKey]
     for itemKey in section.keys():

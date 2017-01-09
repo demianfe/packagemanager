@@ -2,26 +2,28 @@ import os, httpclient, htmlparser, parsecfg
 import xmltree, strtabs, strutils, osproc
 
 import ../utils/configuration
+import ../utils/file
 import recipe
 
 var client = newHttpClient()
 let conf = readConfiguration()
 
-proc findRecipeURL(programName:string, version: string): string =
+proc findRecipeURL*(programName:string, version: string): string =
   #looks for a recipe in the recipe store 
   echo "Looking for recipe $program version $version" % ["program", programName, "version", version]
-  
-  let repositoryURL = conf.getSectionValue("compile","recipeStores")
-  #let response = client.get(url)
-  const url = "/Data/devel/projects/demian/packagemanager/resources/Index_of_recipe-store.html"
-  let html = loadHtml(url)
+  let repositoryURL = conf.getSectionValue("compile","recipesStore")
+  let variablesDir = conf.getSectionValue("compile","variablesDir")
+  #download recipeList from recipelisturl
+  let destination = variablesDir / "tmp/RecipeList.bz2"
+  echo download(repositoryURL / "RecipeList.bz2", destination)
+  #unpack to /tmp/ + timestamp
+  echo unpackFile(destination, variablesDir & "/tmp/")
+  #let html = loadHtml(url)
   var recipeUrl: string
-  for a in html.findAll("a"):
-    let href = a.attrs["href"]
-    if not href.isNil:
-      if href.toLower.find(programName.toLower()) != -1 and href.toLower.find(version.toLower) != -1:
-        recipeUrl = repositoryURL & "/" & href
-        break
+  
+  let recipeList = open(variablesDir / "tmp/RecipeList")
+  for line in readAll(recipeList).split("\n"):
+    echo line
   if recipeUrl.isNil:
     echo "Recipe for $program version $version was not found." % ["program", programName, "version", version]
   return recipeUrl
