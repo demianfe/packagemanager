@@ -1,5 +1,5 @@
-import os, osproc, tables, strutils, parsecfg, sequtils
-import recipe, algorithm
+import os, osproc, tables, strutils, parsecfg, sequtils, algorithm
+import recipe, versions
 
 import ../utils/configuration
 import ../utils/file
@@ -7,6 +7,22 @@ import ../utils/logger
 
 #initialize configuration
 var conf = readConfiguration()
+
+#TODO: generalize this procedure
+proc findProgramVersion(program: string, version: string): string =
+  # if the installed version of `program` >= `version` then it should not be added
+  # to the dependencies
+  var versionsTable: Table[string, string] = initTable[string, string]()
+  var path = conf.getSectionValue("compile", "programsDir")
+  for dir in walkDir(path):
+    if existsDir(dir.path) and dir.path.toLower.find(program.toLower) != -1:
+      echo dir.path
+      for subdir in walkDir(dir.path):
+        let splitPath = subdir.path.split("/")
+        var currentVersion = splitPath[len(splitPath) - 1]
+        versionsTable.add(subdir.path, currentVersion)
+      var result = findPreferedVersion(version, ">=", versionsTable)
+      return result.path
 
 proc buildFail(recipe: RecipeRef, target: string) =
   echo "Removing $1 " % target
@@ -105,6 +121,7 @@ proc loadDependencies(recipe: RecipeRef, recipes: var OrderedTable[string, Recip
   for d in recipe.dependencies:
     echo "Looking recipe for $1 $1" % [d.program, d.version]
     var r = findRecipe(d.program, d.version)
+    
     if isNil r:
       echo "Recipe cannot be nil at this point."
       echo "Failed to find recipe $1 $2" % [d.program, d.version]
@@ -113,18 +130,6 @@ proc loadDependencies(recipe: RecipeRef, recipes: var OrderedTable[string, Recip
       quit(-1)
     recipes.add(r.program, r)
   return recipes
-
-#TODO: generalize this procedure
-proc findProgramVersion(program: string, version: string, path: string): string =
-  var result: string
-  for dir in walkDir(path):
-    if existsDir(dir.path) and dir.path.toLower.find(program.toLower) != -1:
-      for subdir in walkDir(dir.path):
-        echo subdir.path
-        if existsDir(subdir.path) and subdir.path.toLower.find(version.toLower) != -1:
-          result = subdir.path
-          break
-  return result
   
 proc compile*(program: string, version: string) =
   #load all recipes from dependencies list to a seq
@@ -155,9 +160,7 @@ proc compile*(program: string, version: string) =
       if currentRecipe.recipe_type.strip() == "meta":
         echo "WARNING:"
         echo "Ignoring recipe type meta for $1" % currentRecipe.program
-      elif not isNil findProgramVersion(currentRecipe.program,
-                                        currentRecipe.version,
-                                        conf.getSectionValue("main","programs")):
+      elif not isNil findProgramVersion(currentRecipe.program, currentRecipe.version):
          echo "Program $1 $2 already installed."  % [currentRecipe.program, currentRecipe.version]
       else:
         echo "------------------------------------------------------------------"

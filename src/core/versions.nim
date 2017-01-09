@@ -103,7 +103,12 @@ proc removeRevision(versions: Table[string, string]): Table[string, string] =
 
 proc removeNonFloat(versionStr: string): string =
   versionStr.replace(re"[^0-9.]+")
-  
+
+#[
+`versionStr`: version reference
+`operator`: how to compare to the reference version
+`versionsTable`: url|file location of the pagacke|recipe, and its version
+]#
 proc findPreferedVersion*(versionStr: string, operator: string,
                           versionsTable: Table[string, string]): PreferredVersion =
   var versions = versionsTable
@@ -114,7 +119,7 @@ proc findPreferedVersion*(versionStr: string, operator: string,
       let newKey = removeNonFloat(key)
       versions.add(newKey, versions[key])
       versions.del(key)
-      
+
     let bestMatch = findVersion(version, operator, versions)  
     let path = versions[bestMatch]
     echo "Best match is $1 : $2" % [bestMatch, path]

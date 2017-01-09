@@ -19,8 +19,8 @@ proc which*(command: string): string =
   #finds the command in path
   findExe(command)
   
-proc callCommand*(command:string, workingDir: string = "",
-                  args: openArray[string] = []): (int, seq[string]) =
+proc callCommand*(command:string, workingDir: string = "", args: openArray[string] = []):
+                (int, seq[string]) =
   #convient way to call startProcess and handle output
   let options: set[ProcessOption] = {poEchoCmd, poUsePath, poStdErrToStdOut}
   var result: seq[string] = @[]
@@ -39,6 +39,7 @@ proc callCommand*(command:string, workingDir: string = "",
   echo "Exiting with code $1" % $p.peekExitCode
   p.close
   if p.peekExitCode != 0:
+
     writeStackTrace()
     quit(-1)
   return (p.peekExitCode, outLines)
@@ -50,10 +51,7 @@ proc download*(url, destination: string, filename: string=nil): (int, seq[string
   #   let fileDestination: string = destination / filename
   #   args = @["-O", fileDestination, url]
   # else:
-  args = @[url, "--directory-prefix=" & destination ]
-  echo "###################"
-  #echo "file destination  -> $1" % filename
-  echo "###################" 
+  args = @[url, "--directory-prefix=" & destination] 
   return callCommand(command=command, workingDir="/", args=args)
 
 #depreacte
