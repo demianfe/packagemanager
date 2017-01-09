@@ -5,19 +5,22 @@
 # will bee used inside other configuration items.
 [main]
 $root = "/" # root directory
-$depot = "$root/Depot"
-programs = "$root/Programs" #all programs are installed here
-debug = true #true or false
-cachedRecipeStore = "$depot/Resources/index.html"
+$data = "$root/Data"
+$compile = "$data/Compile"
+debug = true
+cachedRecipeStore = "$compile/Resources/index.html"
 
 [compile]
-packagesPath = "$root/Packages" #where the compressed packages are saved
-archivesDir = "$depot/Archives" #compressed packages are stored here
-programsDir = "$root/Programs"
-packagedRecipesDir = "$depot/PackagedRecipes"
-localRecipesPath = "$depot/LocalRecipes"
-sourcesPath = "$depot/Sources"#where the packages will be extracted
+archivesDir = "$compile/Archives" #compressed packages are stored here
+programsDir = "$data/Rootless/Programs" #all programs are installed here
+packagedRecipesPath = "$compile/PackagedRecipes"
+localRecipesDir = "$compile/LocalRecipes"
+sourcesDir = "$compile/Sources"#where the packages will be extracted
+variablesDir = "$data/Variable"
 recipeStores = "http://gobolinux.org/recipe-store"
+
 
 [repository]
 ftpGnu = "ftp://ftp.gnu.org/gnu"
+ftpAlphaGnu="ftp://alpha.gnu.org/gnu"
+httpSourceforge="http://downloads.sourceforge.net"

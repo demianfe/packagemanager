@@ -1,15 +1,11 @@
 import os, osproc, tables, strutils, parsecfg, sequtils
-import recipe, algorithm, logging
+import recipe, algorithm
 
 import ../utils/configuration
 import ../utils/file
 
 #initialize configuration
 var conf = readConfiguration()
-#logger
-var fileLogger = newFileLogger("test/test.log", fmtStr = verboseFmtStr)
-var consoleLogger = newConsoleLogger()
-addHandler(fileLogger)
 
 proc buildFail(recipe: RecipeRef, target: string) =
   echo "Removing $1 " % target

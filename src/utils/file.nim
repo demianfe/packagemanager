@@ -1,5 +1,6 @@
 import os, osproc, strutils, strtabs, httpclient, checkmd5, streams
-
+import logger
+ 
 proc extractFilename*(url: string): string  =
   let
     splitUrl = rsplit(url,"/")
@@ -33,12 +34,11 @@ proc callCommand*(command:string, workingDir: string = "",
     outLines: seq[string] = @[]
   while p.peekExitCode == -1:
     if readLine(pStdout, line):
-      echo line
+      logToFile line
       outLines.add(line)
   echo "Exiting with code $1" % $p.peekExitCode
   p.close
   if p.peekExitCode != 0:
-    echo outLines
     writeStackTrace()
     quit(-1)
   return (p.peekExitCode, outLines)
