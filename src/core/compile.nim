@@ -5,7 +5,7 @@ import ../utils/configuration
 import ../utils/file
 
 #initialize configuration
-let conf = readConfiguration()
+var conf = readConfiguration()
 #logger
 var fileLogger = newFileLogger("test/test.log", fmtStr = verboseFmtStr)
 var consoleLogger = newConsoleLogger()
@@ -20,10 +20,10 @@ proc buildFail(recipe: RecipeRef, target: string) =
   quit(-1)
 
 proc prepareInstall(recipe: RecipeRef): string = 
-  #create $programsPath/recpe.program/recipe.version
+  #create $programsDir/recpe.program/recipe.version
   let
-    programsPath = conf.getSectionValue("compile","programsPath")
-    target = programsPath / recipe.program / recipe.version
+    programsDir = conf.getSectionValue("compile","programsDir")
+    target = programsDir / recipe.program / recipe.version
   discard execProcess("rm -rf $1" % [target])
   echo "Creating target dir $1" % [target]
   discard execProcess("mkdir -p $1" % [target])
@@ -49,10 +49,10 @@ proc buildTypeMakeFile(recipe: RecipeRef, path, target: string): int =
 
 proc buildTypeConfigure(recipe: RecipeRef, path, target: string) =
   #TODO: replace variables
-  #read/load all configuration/installation parameters   
+  #read/load all configuration/installation parameters
   #check if it uses autogen.sh
   #change ./configure mode to +x
-  let programsPath = conf.getSectionValue("compile","programsPath")
+  let programsDir = conf.getSectionValue("compile","programsDir")
   let prefix = "--prefix=$target" % ["target", target]
   var buildPath = path
   var command = "./configure"
@@ -77,8 +77,8 @@ proc buildTypeConfigure(recipe: RecipeRef, path, target: string) =
  
 proc compileProgram(recipe: RecipeRef) =
   let
-    packagesDir = conf.getSectionValue("compile","packagesPath")
-    archivesPath = conf.getSectionValue("compile","archivesPath")
+    archivesDir = conf.getSectionValue("compile","archivesDir")
+    sourcesDir = conf.getSectionValue("compile","sourcesDir")
   var url = recipe.url
   
   if isNil url:
@@ -88,13 +88,13 @@ proc compileProgram(recipe: RecipeRef) =
   let
     splitUrl = rsplit(url,"/")
     fileName = splitUrl[len(splitUrl) - 1].replace("\"","")
-  var filePath = packagesDir / fileName
+  var filePath = archivesDir / fileName
   if not checkFile(filePath, recipe.file_size, recipe.file_md5):
-    let (code, output) = download(url, packagesDir, fileName)
+    let (code, output) = download(url, archivesDir, fileName)
   var unpackedDir = fileName.rsplit("-" & recipe.version)[0]
   #improve this wild guessing
-  unpackedDir = archivesPath / unpackedDir & "-" & recipe.version
-  var p = unpackFile(filePath, archivesPath)
+  unpackedDir = sourcesDir / unpackedDir & "-" & recipe.version
+  var p = unpackFile(filePath, sourcesDir)
   #call the correct recipeType compile procedure
   let target = prepareInstall(recipe)
   if recipe.recipe_type.cmpIgnoreCase("configure") == 0:

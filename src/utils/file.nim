@@ -16,14 +16,8 @@ proc correctPath*(dir, target: string): string =
 
 proc which*(command: string): string =
   #finds the command in path
-  for dir in getEnv("PATH").split(":"):
-    if dir.contains("bin"):
-      for commandPath in walkDir(dir):
-        if commandPath.path.contains(command):
-          let pathParts = commandPath.path.split("/")
-          if pathParts[len(pathParts) - 1] == command:
-            return commandPath.path
-
+  findExe(command)
+  
 proc callCommand*(command:string, workingDir: string = "",
                   args: openArray[string] = []): (int, seq[string]) =
   #convient way to call startProcess and handle output
@@ -52,12 +46,15 @@ proc callCommand*(command:string, workingDir: string = "",
 proc download*(url, destination: string, filename: string=nil): (int, seq[string])  =
   let command = which "wget"
   var args: seq[string]
-  if not isNil filename:
-    let fileDestination: string = destination / filename
-    args = @["-O", fileDestination, url]
-  else:
-    args = @[url]  
-  return callCommand(command=command, workingDir=destination, args=args)
+  # if not isNil filename:
+  #   let fileDestination: string = destination / filename
+  #   args = @["-O", fileDestination, url]
+  # else:
+  args = @[url, "--directory-prefix=" & destination ]
+  echo "###################"
+  #echo "file destination  -> $1" % filename
+  echo "###################" 
+  return callCommand(command=command, workingDir="/", args=args)
 
 #depreacte
 proc localDownloadFile*(url, path: string, timeout=6000000): string {.deprecated.} =

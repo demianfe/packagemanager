@@ -29,7 +29,7 @@ proc findRecipeURL(programName:string, version: string): string =
 proc downloadAndExtractRecipe(url: string) = 
   let splitUrl = rsplit(url,"/")
   let fileName = splitUrl[len(splitUrl) - 1]
-  let downloadedFilName = "$path/$fileName" % ["path", conf.getSectionValue("compile","packagedRecipesPath"),
+  let downloadedFilName = "$path/$fileName" % ["path", conf.getSectionValue("compile","packagedRecipesDir"),
                                     "fileName", fileName]
   #set timeout to 1 min
   downloadFile(url, downloadedFilName, timeout=60000)

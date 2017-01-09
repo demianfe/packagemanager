@@ -116,8 +116,8 @@ proc parseRecipe(strFile: string): RecipeRef =
     #this code may be too general
     if currentLine.len > 0 and not currentLine.startsWith("#"):
       #replace configuration variables
-      let line = currentLine
-      #let line = conf.replaceValues(currentLine).replace("\"","")
+      #let line = currentLine
+      let line = conf.replaceValues(currentLine).replace("\"","")
       #parses the recipe pairs of key=value attributes
       if (line.count("=") == 1) and (line.find("(") == -1) and
         (line.find(")") == -1) and prevFunc == false and prevConf == false:
@@ -128,6 +128,7 @@ proc parseRecipe(strFile: string): RecipeRef =
         if name.strip == "recipe_type":          
           recipe.recipe_type = value
         elif name.strip == "url":
+          #kif value.contains("$"): recipe.url = value
           recipe.url = value
         elif name.strip == "file_size":
           recipe.file_size = parseBiggestInt(value)
@@ -233,9 +234,9 @@ proc downloadAndExtractRecipe(url: string) =
   var path = conf.getSectionValue("compile","packagedRecipesPath")
   let fileName = url.substr(url.rfind("/") + 1, len(url) - 1)
   var filePath = localDownloadFile(url, path)
-  let localRecipesPath = conf.getSectionValue("compile","localRecipesPath")
+  let localRecipesDir = conf.getSectionValue("compile","localRecipesDir")
   filePath = correctPath(path, fileName)
-  echo unpackFile(filePath, localRecipesPath)
+  echo unpackFile(filePath, localRecipesDir)
 
 proc preferredVersion(version:string, operator: string,
                       versionsTable: Table[string, string]): PreferredVersion =
@@ -243,7 +244,7 @@ proc preferredVersion(version:string, operator: string,
    
 proc findLocalRecipe(programName:string, version: string): RecipeRef =
   var recipe: RecipeRef
-  for dir in walkDir(conf.getSectionValue("compile","localRecipesPath")):
+  for dir in walkDir(conf.getSectionValue("compile","localRecipesDir")):
     if existsDir(dir.path) and dir.path.toLower.find(programName.toLower) != -1:
       for subdir in walkDir(dir.path):
         if existsDir(subdir.path) and subdir.path.toLower.find(version.toLower) != -1:
@@ -258,8 +259,8 @@ proc findLocalRecipe(programName:string, version: string): RecipeRef =
 proc findLocalRecipe(program:string, operator:string, versionStr: string): RecipeRef =
   #TODO: use program name from the path
   var versionsTable: Table[string, string] = initTable[string, string]()
-  let localRecipesPath = conf.getSectionValue("compile","localRecipesPath")
-  for dir in walkDir(localRecipesPath):
+  let localRecipesDir = conf.getSectionValue("compile","localRecipesDir")
+  for dir in walkDir(localRecipesDir):
     if existsDir(dir.path) and dir.path.toLower.find(program.toLower) != -1:
       for subdir in walkDir(dir.path):
         let currentVersion = subdir.path.substr(subdir.path.rfind("/") + 1, subdir.path.find("-r") - 1)

@@ -12,9 +12,9 @@ cachedRecipeStore = "$depot/Resources/index.html"
 
 [compile]
 packagesPath = "$root/Packages" #where the compressed packages are saved
-archivesPath = "$depot/Archives" #compressed packages are stored here
-programsPath = "$root/Programs"
-packagedRecipesPath = "$depot/PackagedRecipes"
+archivesDir = "$depot/Archives" #compressed packages are stored here
+programsDir = "$root/Programs"
+packagedRecipesDir = "$depot/PackagedRecipes"
 localRecipesPath = "$depot/LocalRecipes"
 sourcesPath = "$depot/Sources"#where the packages will be extracted
 recipeStores = "http://gobolinux.org/recipe-store"

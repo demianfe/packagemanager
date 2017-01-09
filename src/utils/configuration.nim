@@ -4,7 +4,10 @@ proc replaceValue(value: var string, replacementValues: OrderedTable[string, str
   #iterates over the replacemet table to see if we can replace something
   var presentVars: seq[string] = @[]
   for key in replacementValues.keys():
-    if value.find(key) != -1:
+    #ignore case
+    echo value.toLower()
+    echo key.toLower()
+    if value.toLower().find(key.toLower()) != -1:
       presentVars.add(key.replace("$",""))
       presentVars.add(replacementValues[key])
   value = value % presentVars
@@ -59,7 +62,7 @@ proc generateReplacmentTable(dict: Config): OrderedTable[string, string] =
 proc readConfiguration*(): Config =
   var baseDir = os.getCurrentDir() & "/src"
   var dict = loadConfig(baseDir & "/packagemanager.cfg")
-  var replacementTable = generateReplacmentTable(dict) 
+  var replacementTable = generateReplacmentTable(dict)
   for sectionKey in dict.keys():
     var section = dict[sectionKey]
     for itemKey in section.keys():
