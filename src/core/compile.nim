@@ -3,6 +3,7 @@ import recipe, algorithm
 
 import ../utils/configuration
 import ../utils/file
+import ../utils/logger
 
 #initialize configuration
 var conf = readConfiguration()
@@ -12,7 +13,9 @@ proc buildFail(recipe: RecipeRef, target: string) =
   echo "Failed to compile $1 $2" % [recipe.program, recipe.version]
   discard execProcess("rm -rf $1" % target)
   writeStackTrace()
-  echo getCurrentExceptionMsg()
+  let exceptionMsg =  getCurrentExceptionMsg()
+  echo exceptionMsg
+  logError exceptionMsg
   quit(-1)
 
 proc prepareInstall(recipe: RecipeRef): string = 

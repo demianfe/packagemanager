@@ -1,12 +1,24 @@
 import os, tables, strutils, parsecfg
 
+let goboVariables = ["goboBoot", "goboExecutables", "goboLibraries", "goboObjects",
+                     "goboStatus", "goboUsers", " goboData", "goboHeaders",
+                     "goboManuals", "goboPrograms", "goboSystem", "goboUserSettings",
+                     "goboDevices", "goboIndex", "goboModules", "goboSettings",
+                     "goboTasks", "goboVariable", "goboEnvironment", "goboKernel",
+                     "goboMount", "goboShared", "goboTemp"]
+
+
+proc readGoboVariables(config: var Config) =
+  #read al gobolinux environment variables
+  for variable in goboVariables:
+    if existsEnv(variable):
+      config.setSectionKey("gobo", variable, getEnv(variable))
+
 proc replaceValue(value: var string, replacementValues: OrderedTable[string, string]): string =
   #iterates over the replacemet table to see if we can replace something
   var presentVars: seq[string] = @[]
   for key in replacementValues.keys():
     #ignore case
-    echo value.toLower()
-    echo key.toLower()
     if value.toLower().find(key.toLower()) != -1:
       presentVars.add(key.replace("$",""))
       presentVars.add(replacementValues[key])
@@ -56,15 +68,17 @@ proc generateReplacmentTable(dict: Config): OrderedTable[string, string] =
         while value.find("$") != -1 or count < len(replacementTable):
           value = replaceValue(value, replacementTable)
           count += 1
+        value = value.replace("//","/")
         replacementTable.add(itemKey, value)
   return replacementTable
 
 proc readConfiguration*(): Config =
   var baseDir = os.getCurrentDir() & "/src"
-  var dict = loadConfig(baseDir & "/packagemanager.cfg")
-  var replacementTable = generateReplacmentTable(dict)
-  for sectionKey in dict.keys():
-    var section = dict[sectionKey]
+  var config = loadConfig(baseDir & "/packagemanager.cfg")
+  var replacementTable = generateReplacmentTable(config)
+  
+  for sectionKey in config.keys():
+    var section = config[sectionKey]
     for itemKey in section.keys():
       var value = section[itemKey]
       #if the value contains `$` should be replaced with something
@@ -72,5 +86,6 @@ proc readConfiguration*(): Config =
       while value.find("$") != -1 or count < len(replacementTable):
         value = replaceValue(value, replacementTable)
         count += 1
-      dict.setSectionKey(sectionKey, itemKey, value)
-  return dict
+      config.setSectionKey(sectionKey, itemKey, value)
+  readGoboVariables(config)
+  return config

@@ -8,5 +8,10 @@ let logFile = varDir & "/log/packagemanager.log"
 var fileLogger = newFileLogger(logFile, fmtStr = verboseFmtStr)
 addHandler(fileLogger)
 
-proc logToFile*(message: string) =
-  info(message)
+proc logToFile*(msg: string) =
+  info(msg)
+
+proc logError*(msg: string) =
+  error("================== ERROR ==================")
+  error(msg)
+  error("===========================================")
