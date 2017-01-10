@@ -39,7 +39,6 @@ proc callCommand*(command:string, workingDir: string = "", args: openArray[strin
   echo "Exiting with code $1" % $p.peekExitCode
   p.close
   if p.peekExitCode != 0:
-
     writeStackTrace()
     quit(-1)
   return (p.peekExitCode, outLines)

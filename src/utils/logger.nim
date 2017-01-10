@@ -1,4 +1,4 @@
-import logging, parsecfg
+import logging, parsecfg, strutils
 import configuration
 
 let conf = readConfiguration()
@@ -9,7 +9,8 @@ var fileLogger = newFileLogger(logFile, fmtStr = verboseFmtStr)
 addHandler(fileLogger)
 
 proc logToFile*(msg: string) =
-  info(msg)
+  if conf.getSectionValue("main", "debug").cmpIgnoreCase("true") == 0:
+    info(msg)
 
 proc logError*(msg: string) =
   error("================== ERROR ==================")

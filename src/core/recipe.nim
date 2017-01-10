@@ -136,7 +136,7 @@ proc parseRecipe(strFile: string): RecipeRef =
           recipe.file_md5 = value
         elif name.strip == "compile_version":
           recipe.compile_version = value
-              
+          
       elif line.replace(" ","").find("()") != -1 and prevFunc == false and prevConf == false:
         #finds a functions and treat following lines as part of the function
         #until the `}` function block end is found
@@ -208,35 +208,14 @@ proc getRecipeDirTree(dir: string): RecipeRef =
       #TODO: tasks
   return recipe
 
-proc findRecipeURL(programName:string, version: string): string =
-  #looks for a recipe in the recipe store 
-  echo "Looking for recipe $program version $version" % ["program", programName, "version", version]
-  let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
-  var html: XmlNode
-  if conf.getSectionValue("main", "debug") != "true":
-    var client = newHttpClient()
-    let response = client.get(recipeStoreURL)
-    html = parseHtml(newStringStream(response.body))
-  else:
-     html = loadHtml(conf.getSectionValue("main", "cachedRecipeStore"))
-  var recipeUrl: string
-  for a in html.findAll("a"):
-    let href = a.attrs["href"]
-    if not href.isNil:
-      if href.toLower.find(programName.toLower()) != -1 and href.toLower.find(version.toLower) != -1:
-        recipeUrl = recipeStoreURL & "/" & href
-        break
-  if recipeUrl.isNil:
-    echo "Recipe for $program version $version was not found." % ["program", programName, "version", version]
-  return recipeUrl
     
 proc downloadAndExtractRecipe(url: string) = 
   var path = conf.getSectionValue("compile","packagedRecipesPath")
   let fileName = url.substr(url.rfind("/") + 1, len(url) - 1)
   var filePath = localDownloadFile(url, path)
-  let localRecipesDir = conf.getSectionValue("compile","localRecipesDir")
+  let recipesDir = conf.getSectionValue("compile","recipesDir")
   filePath = correctPath(path, fileName)
-  echo unpackFile(filePath, localRecipesDir)
+  echo unpackFile(filePath, recipesDir)
 
 proc preferredVersion(version:string, operator: string,
                       versionsTable: Table[string, string]): PreferredVersion =
@@ -244,7 +223,7 @@ proc preferredVersion(version:string, operator: string,
    
 proc findLocalRecipe(programName:string, version: string): RecipeRef =
   var recipe: RecipeRef
-  for dir in walkDir(conf.getSectionValue("compile","localRecipesDir")):
+  for dir in walkDir(conf.getSectionValue("compile","recipesDir")):
     if existsDir(dir.path) and dir.path.toLower.find(programName.toLower) != -1:
       for subdir in walkDir(dir.path):
         if existsDir(subdir.path) and subdir.path.toLower.find(version.toLower) != -1:
@@ -259,8 +238,8 @@ proc findLocalRecipe(programName:string, version: string): RecipeRef =
 proc findLocalRecipe(program:string, operator:string, versionStr: string): RecipeRef =
   #TODO: use program name from the path
   var versionsTable: Table[string, string] = initTable[string, string]()
-  let localRecipesDir = conf.getSectionValue("compile","localRecipesDir")
-  for dir in walkDir(localRecipesDir):
+  let recipesDir = conf.getSectionValue("compile","recipesDir")
+  for dir in walkDir(recipesDir):
     if existsDir(dir.path) and dir.path.toLower.find(program.toLower) != -1:
       for subdir in walkDir(dir.path):
         let currentVersion = subdir.path.substr(subdir.path.rfind("/") + 1, subdir.path.find("-r") - 1)
@@ -274,30 +253,44 @@ proc findLocalRecipe(program:string, operator:string, versionStr: string): Recip
         recipe.program = program
         recipe.version = $preferredVersion.version
       return recipe
-      
+
+proc getRecipeList(recipeStore: string): seq[string] =
+  const recpeListPckgName = "RecipeList.bz2"
+  let variablesDir = conf.getSectionValue("compile","variablesDir")
+  let destination = variablesDir / "tmp"
+  # FIXME: download comppresed list only once
+  #discard download(recipeStore / recpeListPckgName, destination)
+  let cmdResult = callCommand("bunzip2", destination, ["-c", recpeListPckgName])
+  return cmdResult[1]
+
+proc findRecipeURL(programName:string, version: string): string =
+  #looks for a recipe in the recipe store 
+  echo "Looking for recipe $program version $version" % ["program", programName, "version", version]
+  let recipeStore = conf.getSectionValue("compile","recipeStore")
+  let recipeList = getRecipeList(recipeStore)
+  var recipeUrl: string
+  for line in recipeList:
+    let splitLine = line.split("--")
+    let lineVersion = splitLine[1].substr(0,  splitLine[1].find("-") - 1)
+    if splitLine[0].cmpIgnoreCase(programName) == 0 and lineVersion.cmpIgnoreCase(version) == 0:
+       recipeUrl = recipeStore / line
+       break
+  if recipeUrl.isNil:
+    echo "Recipe for $program version $version was not found." % ["program", programName, "version", version]
+  return recipeUrl
+
 # looks up for the best matching recipe in the recipe store
 proc findRecipeUrl(program:string, operator:string, versionStr: string): PreferredVersion =
   echo "Searching for recipe $1 $2 in the remote repository" % [program, versionStr]
   var programVersions: seq[string] = @[]
-  let recipeStoreURL = conf.getSectionValue("compile","recipeStores")
-  # TODO: download recipe store file only once
-  var html: XmlNode
-  if conf.getSectionValue("main", "debug") != "true":
-    var client = newHttpClient()
-    let response = client.get(recipeStoreURL)
-    html = parseHtml(newStringStream(response.body))
-  else:
-     html = loadHtml(conf.getSectionValue("main", "cachedRecipeStore"))  
-  for a in html.findAll("a"):
-    let href = a.attrs["href"]
-    if not href.isNil:
-      var currentProgram = href.toLower.substr
-      currentProgram = currentProgram.substr(currentProgram.rfind("/"),
-                                             currentProgram.find("--") - 1)
-      if currentProgram == program.toLower():
-        let recipeUrl = recipeStoreURL & "/" & href
-        programVersions.add(recipeUrl)
-
+  let recipeStore = conf.getSectionValue("compile","recipeStore")
+  let recipeList = getRecipeList(recipeStore)
+  for line in recipeList:
+    let splitLine = line.split("--")
+    let lineVersion = splitLine[1].substr(0,  splitLine[1].find("-") - 1)
+    if splitLine[0].cmpIgnoreCase(program) == 0:
+       let recipeUrl = recipeStore / line
+       programVersions.add(recipeUrl)
   var versionsTable: Table[string, string] = initTable[string, string]()
   for pv in programVersions:
     let recipeVersion = pv.split("--")[1]
@@ -306,7 +299,7 @@ proc findRecipeUrl(program:string, operator:string, versionStr: string): Preferr
       versionsTable.add(v, pv)
   let preferredVersion = preferredVersion(versionStr, operator, versionsTable)
   return preferredVersion
-
+      
 #TODO: look for the recipe remotely first but do not download it.
 #TODO: lookup if is not locally packaged
 proc findRecipe*(program: string, operator: string, versionStr: string): RecipeRef =

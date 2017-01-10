@@ -119,7 +119,6 @@ proc findPreferedVersion*(versionStr: string, operator: string,
       let newKey = removeNonFloat(key)
       versions.add(newKey, versions[key])
       versions.del(key)
-
     let bestMatch = findVersion(version, operator, versions)  
     let path = versions[bestMatch]
     echo "Best match is $1 : $2" % [bestMatch, path]

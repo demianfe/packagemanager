@@ -25,14 +25,7 @@ proc testRecipeSections() =
   echo recipe.properties
   echo recipe.configurations
 
-let
-  path = "/Data/Rootless/Depot/Archives/glibc-2.15"
-  buildPath = path / "build"
+proc testRecipeUtils() =
+  echo findRecipeURL("nano", "2.7.0")
 
-#hacer mkdir path/../build
-#cd al nuevo dir
-#ejecutar path/.configure
-createDir(buildPath)
-setCurrentDir(buildPath)
-var command = "../configure"
-let (resultCode, output) = callCommand(command=command, workingDir=buildPath)
+testRecipeUtils()
