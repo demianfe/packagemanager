@@ -25,7 +25,7 @@ proc replaceValue(value: var string, replacementValues: OrderedTable[string, str
   value = value % presentVars
   return value
   
-proc replaceValues*(config: Config, input:string ): string =
+proc replaceValues*(config: Config, input:string): string =
   #TODO: if variable is not found it should throw an error
   #iterates over the config table and replaces configuration values in the input string
   #count the number of `$` found in the input string

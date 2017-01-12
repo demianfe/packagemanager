@@ -1,7 +1,7 @@
 # procs that help package version handling
 # TODO: handle excluded versions
-import tables, sequtils, algorithm, strutils
-import re
+import tables, sequtils, algorithm, strutils, re
+import ../utils/logger
 
 type
   PreferredVersion* = tuple[version: string, path: string]
@@ -119,7 +119,7 @@ proc findPreferedVersion*(versionStr: string, operator: string,
       let newKey = removeNonFloat(key)
       versions.add(newKey, versions[key])
       versions.del(key)
-    let bestMatch = findVersion(version, operator, versions)  
+    let bestMatch = findVersion(version, operator, versions)
     let path = versions[bestMatch]
     echo "Best match is $1 : $2" % [bestMatch, path]
     return (bestMatch, path)
@@ -127,4 +127,5 @@ proc findPreferedVersion*(versionStr: string, operator: string,
     for key in versions.keys():
       echo (key, " : ", versions[key])
     writeStackTrace()
+    logError getCurrentExceptionMsg()
     quit(-1)

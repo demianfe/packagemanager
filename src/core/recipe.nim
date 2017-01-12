@@ -116,7 +116,7 @@ proc parseRecipe(strFile: string): RecipeRef =
     #this code may be too general
     if currentLine.len > 0 and not currentLine.startsWith("#"):
       #replace configuration variables
-      #let line = currentLine
+      
       let line = conf.replaceValues(currentLine).replace("\"","")
       #parses the recipe pairs of key=value attributes
       if (line.count("=") == 1) and (line.find("(") == -1) and
@@ -207,7 +207,6 @@ proc getRecipeDirTree(dir: string): RecipeRef =
         echo "TODO: Environment"
       #TODO: tasks
   return recipe
-
     
 proc downloadAndExtractRecipe(url: string) = 
   var path = conf.getSectionValue("compile","packagedRecipesPath")

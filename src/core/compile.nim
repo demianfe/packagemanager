@@ -1,4 +1,4 @@
-import os, osproc, tables, strutils, parsecfg, sequtils, algorithm
+import os, osproc, tables, strutils, parsecfg, sequtils, algorithm, rdstdin
 import recipe, versions
 
 import ../utils/configuration
@@ -7,6 +7,16 @@ import ../utils/logger
 
 #initialize configuration
 var conf = readConfiguration()
+      
+proc buildFail(recipe: RecipeRef, target: string) =
+  echo "Removing $1 " % target
+  echo "Failed to compile $1 $2" % [recipe.program, recipe.version]
+  removeDir target #execProcess("rm -rf $1" % target)
+  writeStackTrace()
+  let exceptionMsg = getCurrentExceptionMsg()
+  echo exceptionMsg
+  logError exceptionMsg
+  quit(-1)
 
 #TODO: generalize this procedure
 proc findProgramVersion(program: string, version: string): string =
@@ -21,24 +31,39 @@ proc findProgramVersion(program: string, version: string): string =
         let splitPath = subdir.path.split("/")
         var currentVersion = splitPath[len(splitPath) - 1]
         versionsTable.add(subdir.path, currentVersion)
-      var result = findPreferedVersion(version, ">=", versionsTable)
-      return result.path
+      if len(versionsTable) > 0:
+        var result = findPreferedVersion(version, ">=", versionsTable)
+        return result.path
 
-proc buildFail(recipe: RecipeRef, target: string) =
-  echo "Removing $1 " % target
-  echo "Failed to compile $1 $2" % [recipe.program, recipe.version]
-  discard execProcess("rm -rf $1" % target)
-  writeStackTrace()
-  let exceptionMsg =  getCurrentExceptionMsg()
-  echo exceptionMsg
-  logError exceptionMsg
-  quit(-1)
-
+proc replaceRecipeVars(recipe: RecipeRef) =
+  #properties
+  for key in recipe.properties.keys():
+    recipe.properties[key] = conf.replaceValues(
+      recipe.properties[key].replace("{","").replace("}",""))
+  #configuration
+  for key in recipe.configurations.keys():
+    var newVals: seq[string] = @[]
+    for val in recipe.configurations[key]:
+      discard conf.replaceValues(val.replace("{","").replace("}",""))
+      newVals.add(conf.replaceValues(val))
+    recipe.configurations[key] = newVals
+  #functions
+  for key in recipe.functions.keys():
+    var newVals: seq[string] = @[]
+    for val in recipe.functions[key]:
+      echo conf.replaceValues(val.replace("{","").replace("}",""))
+      newVals.add(conf.replaceValues(val))     
+    recipe.functions[key] = newVals
+        
 proc prepareInstall(recipe: RecipeRef): string = 
   #create $programsDir/recpe.program/recipe.version
   let
     programsDir = conf.getSectionValue("compile","programsDir")
     target = programsDir / recipe.program / recipe.version
+  #TODO: remove section
+  conf.setSectionKey("temp", "target", target)
+  replaceRecipeVars(recipe)
+  #FIXME: prompt before removing, and it should be done before installing
   discard execProcess("rm -rf $1" % [target])
   echo "Creating target dir $1" % [target]
   discard execProcess("mkdir -p $1" % [target])
@@ -71,8 +96,10 @@ proc buildTypeConfigure(recipe: RecipeRef, path, target: string) =
   let prefix = "--prefix=$target" % ["target", target]
   var buildPath = path
   var command = "./configure"
-  if recipe.properties.contains("needs_build_directory") and recipe.properties["needs_build_directory"] == "yes":
+  if recipe.properties.contains("needs_build_directory") and
+     recipe.properties["needs_build_directory"] == "yes":
     buildPath = path / "build"
+    discard existsOrCreateDir(buildPath)
     command = ".$1" % command
   var args = newSeq[string]()
   try:
@@ -94,8 +121,7 @@ proc compileProgram(recipe: RecipeRef) =
   let
     archivesDir = conf.getSectionValue("compile","archivesDir")
     sourcesDir = conf.getSectionValue("compile","sourcesDir")
-  var url = recipe.url
-  
+  var url = recipe.url  
   if isNil url:
     #TODO: iterate over urls
     url = recipe.configurations["urls"][0]
@@ -104,8 +130,15 @@ proc compileProgram(recipe: RecipeRef) =
     splitUrl = rsplit(url,"/")
     fileName = splitUrl[len(splitUrl) - 1].replace("\"","")
   var filePath = archivesDir / fileName
+  
   if not checkFile(filePath, recipe.file_size, recipe.file_md5):
-    let (code, output) = download(url, archivesDir, fileName)
+    let prompt = "\nFile found at: $1." % filePath &
+      "\n\rSize and md5 could not be verified. Remove and download again? y/n: " 
+    let input = readLineFromStdin(prompt)
+    if input.cmpIgnoreCase("y") == 0:
+      echo "Removing and downloading file"
+      removeFile(filePath)
+      let (code, output) = download(url, archivesDir, fileName)
   var unpackedDir = fileName.rsplit("-" & recipe.version)[0]
   #improve this wild guessing
   unpackedDir = sourcesDir / unpackedDir & "-" & recipe.version
@@ -115,13 +148,14 @@ proc compileProgram(recipe: RecipeRef) =
   if recipe.recipe_type.cmpIgnoreCase("configure") == 0:
     buildTypeConfigure(recipe, unpackedDir, target)
     var code = buildTypeMakeFile(recipe, unpackedDir, target)
+  #delete temporal variables
+  conf.delSection("temp")
 
 proc loadDependencies(recipe: RecipeRef, recipes: var OrderedTable[string, RecipeRef]):
                      OrderedTable[string, RecipeRef] =
   for d in recipe.dependencies:
     echo "Looking recipe for $1 $1" % [d.program, d.version]
-    var r = findRecipe(d.program, d.version)
-    
+    var r = findRecipe(d.program, d.version)    
     if isNil r:
       echo "Recipe cannot be nil at this point."
       echo "Failed to find recipe $1 $2" % [d.program, d.version]
@@ -144,8 +178,7 @@ proc compile*(program: string, version: string) =
   else:
     dep.operator = ">="
   recipe = findRecipe(dep)
-  recipes.add(recipe.program, recipe)
-  
+  recipes.add(recipe.program, recipe)  
   if not isNil recipe:
     #TODO: check if $Program/$version is already installed
     #iterate over the dependencies of the dependencies...
