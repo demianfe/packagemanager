@@ -38,6 +38,11 @@ type
 type
   RecipeRef* = ref Recipe
 
+#type RecipeList = object
+#    list*: seq[string]
+
+var recipeList*: seq[string] = newSeq[string](0)
+
 proc `$`*(recipe: Recipe): string =
   if not isNil recipe.file_md5:
     let result: string = "$1, $2, $3" % [recipe.program, recipe.version, recipe.file_md5]
@@ -218,7 +223,7 @@ proc downloadAndExtractRecipe(url: string) =
 
 proc preferredVersion(version:string, operator: string,
                       versionsTable: Table[string, string]): PreferredVersion =
-    return findPreferedVersion(version, operator, versionsTable)
+    return findPreferredVersion(version, operator, versionsTable)
    
 proc findLocalRecipe(programName:string, version: string): RecipeRef =
   var recipe: RecipeRef
@@ -254,13 +259,13 @@ proc findLocalRecipe(program:string, operator:string, versionStr: string): Recip
       return recipe
 
 proc getRecipeList(recipeStore: string): seq[string] =
-  const recpeListPckgName = "RecipeList.bz2"
-  let variablesDir = conf.getSectionValue("compile","variablesDir")
-  let destination = variablesDir / "tmp"
-  # FIXME: download comppresed list only once
-  #discard download(recipeStore / recpeListPckgName, destination)
-  let cmdResult = callCommand("bunzip2", destination, ["-c", recpeListPckgName])
-  return cmdResult[1]
+  #recipeList defined as singleton
+  if len(recipeList) == 0:
+    echo "Downloading RecipeList.bz2"
+    let variablesDir = conf.getSectionValue("compile","variablesDir")
+    let destination = variablesDir / "tmp"
+    recipeList = downloadRecipeList(recipeStore, destination)
+  return recipeList
 
 proc findRecipeURL(programName:string, version: string): string =
   #looks for a recipe in the recipe store 
@@ -285,11 +290,12 @@ proc findRecipeUrl(program:string, operator:string, versionStr: string): Preferr
   let recipeStore = conf.getSectionValue("compile","recipeStore")
   let recipeList = getRecipeList(recipeStore)
   for line in recipeList:
-    let splitLine = line.split("--")
-    let lineVersion = splitLine[1].substr(0,  splitLine[1].find("-") - 1)
-    if splitLine[0].cmpIgnoreCase(program) == 0:
-       let recipeUrl = recipeStore / line
-       programVersions.add(recipeUrl)
+    let splitLine = line.strip.split("--")
+    if len(splitLine) > 0:
+      let lineVersion = splitLine[1].substr(0,  splitLine[1].find("-") - 1)
+      if splitLine[0].cmpIgnoreCase(program) == 0:
+        let recipeUrl = recipeStore / line
+        programVersions.add(recipeUrl)
   var versionsTable: Table[string, string] = initTable[string, string]()
   for pv in programVersions:
     let recipeVersion = pv.split("--")[1]
@@ -316,22 +322,23 @@ proc findRecipe*(program: string, operator: string, versionStr: string): RecipeR
     return recipe
   
 proc findRecipe*(program: string, version: string): RecipeRef =
-  var recipe: RecipeRef = findLocalRecipe(program, version)
-  if isNil recipe:
-    echo "Recipe not found whitn local recipes. Looking remotely."
-    let recipeURL = findRecipeURL(program, version)
-    if not isNil recipeURL:
-    #lookup for the extracted recipe in the recipes directory
-      downloadAndExtractRecipe recipeURL
-      recipe = findLocalRecipe(program, version)
-  return recipe
+  return findRecipe(program, ">=", version)
+  # var recipe: RecipeRef = findLocalRecipe(program, version)
+  # if isNil recipe:
+  #   echo "Recipe not found whitn local recipes. Looking remotely."
+  #   let recipeURL = findRecipeURL(program, version)
+  #   if not isNil recipeURL:
+  #   #lookup for the extracted recipe in the recipes directory
+  #     downloadAndExtractRecipe recipeURL
+  #     recipe = findLocalRecipe(program, version)
+  # return recipe
 
 proc findRecipe*(dependency: Dependency): RecipeRef =
   if isNil dependency.operator:
     var recipe = findRecipe(dependency.program, dependency.version)
     #if the extact version is not found look for a newer version
     if isNil recipe:
-      echo "REcipe not found, looking best match."
+      echo "Recipe not found, looking best match."
       recipe = findRecipe(dependency.program, ">=", dependency.version)
     return recipe
   else:

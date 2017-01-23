@@ -1,6 +1,6 @@
 import os, tables, strutils, parsecfg
 
-let goboVariables = ["goboBoot", "goboExecutables", "goboLibraries", "goboObjects",
+const goboVariables = ["goboBoot", "goboExecutables", "goboLibraries", "goboObjects",
                      "goboStatus", "goboUsers", " goboData", "goboHeaders",
                      "goboManuals", "goboPrograms", "goboSystem", "goboUserSettings",
                      "goboDevices", "goboIndex", "goboModules", "goboSettings",

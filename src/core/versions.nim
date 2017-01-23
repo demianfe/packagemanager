@@ -109,7 +109,7 @@ proc removeNonFloat(versionStr: string): string =
 `operator`: how to compare to the reference version
 `versionsTable`: url|file location of the pagacke|recipe, and its version
 ]#
-proc findPreferedVersion*(versionStr: string, operator: string,
+proc findPreferredVersion*(versionStr: string, operator: string,
                           versionsTable: Table[string, string]): PreferredVersion =
   var versions = versionsTable
   try:
@@ -128,4 +128,5 @@ proc findPreferedVersion*(versionStr: string, operator: string,
       echo (key, " : ", versions[key])
     writeStackTrace()
     logError getCurrentExceptionMsg()
-    quit(-1)
+    raise getCurrentException()
+    #quit(-1)

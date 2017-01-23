@@ -32,7 +32,7 @@ proc findProgramVersion(program: string, version: string): string =
         var currentVersion = splitPath[len(splitPath) - 1]
         versionsTable.add(subdir.path, currentVersion)
       if len(versionsTable) > 0:
-        var result = findPreferedVersion(version, ">=", versionsTable)
+        var result = findPreferredVersion(version, ">=", versionsTable)
         return result.path
 
 proc replaceRecipeVars(recipe: RecipeRef) =
@@ -154,8 +154,7 @@ proc compileProgram(recipe: RecipeRef) =
 proc loadDependencies(recipe: RecipeRef, recipes: var OrderedTable[string, RecipeRef]):
                      OrderedTable[string, RecipeRef] =
   for d in recipe.dependencies:
-    echo "Looking recipe for $1 $1" % [d.program, d.version]
-    var r = findRecipe(d.program, d.version)    
+    var r = findRecipe(d.program, d.version)
     if isNil r:
       echo "Recipe cannot be nil at this point."
       echo "Failed to find recipe $1 $2" % [d.program, d.version]
@@ -180,7 +179,6 @@ proc compile*(program: string, version: string) =
   recipe = findRecipe(dep)
   recipes.add(recipe.program, recipe)  
   if not isNil recipe:
-    #TODO: check if $Program/$version is already installed
     #iterate over the dependencies of the dependencies...
     recipes = loadDependencies(recipe, recipes)    
     #reverse order of compilation
@@ -197,8 +195,7 @@ proc compile*(program: string, version: string) =
          echo "Program $1 $2 already installed."  % [currentRecipe.program, currentRecipe.version]
       else:
         echo "------------------------------------------------------------------"
-        echo "Compiling $1 $2"  % [currentRecipe.program, currentRecipe.version]
-        
+        echo "Compiling $1 $2"  % [currentRecipe.program, currentRecipe.version]        
         echo "Compile type $1" % currentRecipe.recipe_type
         echo "------------------------------------------------------------------"
         compileProgram(currentRecipe)

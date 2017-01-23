@@ -23,12 +23,9 @@ proc callCommand*(command:string, workingDir: string = "", args: openArray[strin
                 (int, seq[string]) =
   #convient way to call startProcess and handle output
   let options: set[ProcessOption] = {poEchoCmd, poUsePath, poStdErrToStdOut}
-  var result: seq[string] = @[]
-  var p = startProcess(command=command,
-                       workingDir=workingDir,
-                       args=args,
-                       options=options)
   var
+    result: seq[string] = @[]
+    p = startProcess(command=command, workingDir=workingDir, args=args, options=options)
     pStdout = p.outputStream()
     line: TaintedString = ""
     outLines: seq[string] = @[]
@@ -83,3 +80,20 @@ proc checkFile*(path: string, size: BiggestInt, md5: string): bool =
       echo "Error: file size did not match. Expected $1, got $2" % [$size, $fileInfo.size]
   else:
     return false
+
+proc downloadRecipeList*(recipeStore, destination: string): seq[string] =
+  const RecipeList = "RecipeList"
+  let recpeListPckg = RecipeList & ".bz2"
+  # let variablesDir = conf.getSectionValue("compile","variablesDir")
+  # let destination = variablesDir / "tmp"
+  # FIXME: download comppresed list only once
+  if existsFile(destination / recpeListPckg):
+    echo "Removing $1" % [recpeListPckg]
+    removefile(recpeListPckg)
+  if existsFile(destination / RecipeList):
+    echo "Removing $1" % [destination / RecipeList]
+    removefile(destination / RecipeList)
+  discard download(recipeStore / recpeListPckg, destination)
+  let cmdResult = callCommand("bunzip2", destination, [destination / recpeListPckg])
+  let file = readFile(destination / RecipeList)
+  return file.split("\n")
