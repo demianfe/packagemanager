@@ -9,6 +9,33 @@ type
 proc `$`*(preferredVersion: PreferredVersion): string =
   return preferredVersion.version & " : " & preferredVersion.path
 
+proc strComparator(a: string, operator: string, b: string): SomeSignedInt =
+  if operator == ">=":
+    if a >= b:
+      return 1
+    else:
+      return -1
+  elif operator == ">" :
+    if a > b:
+      return 1
+    else:
+      return -1
+  elif operator == "<=":
+    if a <= b:
+      return 1
+    else:
+      return -1
+  elif operator == "<" :
+    if a < b:
+      return 1
+    else:
+      return -1
+  elif operator == "=":
+    if a == b:
+     return 1
+    else:
+      return -1
+
 proc intComparator(a: int, operator: string, b: int): SomeSignedInt =
   if operator == ">=":
     if a >= b:
@@ -36,16 +63,37 @@ proc intComparator(a: int, operator: string, b: int): SomeSignedInt =
     else:
       return -1
 
+proc comparator(a: string, operator: string, b: string): SomeSignedInt =
+  # delegats to the specific comparator
+  # basic logic:
+  # if a and b ar ints use intComparator
+  # if a is int and b is alpha, a wins
+  # if a alpha and b is int, b wins
+  # if a is alphaNumeric and the length of both 
+  if isDigit(a) and isDigit(b):
+    return intComparator(parseInt(a), operator, parseInt(b))
+  else:
+    return strComparator(a, operator, b)
+    
+#TODO: modify this procedure to recieve a index (int) and a string (version)
+# compare character by character in the sequence:
+#   if the character is a numeric call compareInt
+#   else if the character is not numeric call compareChar (?)
+# both this functions recieve the index of the it is representing and the character to be compared
+# it then returns the index associated with the greatest character
 proc compareVersions(v1: string, operator: string, v2: string): string =
-  #compare a sequence of int values using intComparator
-  let a = map(v1.split("."), proc(x: string): int = parseInt(x))
-  let b = map(v2.split("."), proc(x: string): int = parseInt(x))
+  #compare a sequence of int values using intComparator      
+  # let a = map(v1.split("."), proc(x: string): int = parseInt(x))
+  # let b = map(v2.split("."), proc(x: string): int = parseInt(x))
+  let a = v1.split(".")
+  let b = v2.split(".")
   var i = 0
   var maxLength = len(a)
-  #use the shortest array as max
+  
   if maxLength > len(b): maxLength = len(b)
   try:
     while i < maxLength:
+      # echo "$1 $2 $3" % [v1, operator, v2]
       if a[i] == b[i]:
         #compare versions with the reset of the sequence
         let newA = a[(i + 1)..len(a) - 1].join(".")
@@ -54,9 +102,9 @@ proc compareVersions(v1: string, operator: string, v2: string): string =
         if maxLength == 1: return v1
         let r  = compareVersions($newA, operator, $newB)
         return "$1.$2" % [$a[i], r]
-      elif intComparator(a[i], operator, b[i]) == -1:
+      elif comparator(a[i], operator, b[i]) == -1:
         return b.join(".")
-      elif intComparator(a[i], operator, b[i]) == 1:
+      elif comparator(a[i], operator, b[i]) == 1:
         return a.join(".")
       i += 1
   except:
@@ -65,6 +113,7 @@ proc compareVersions(v1: string, operator: string, v2: string): string =
     quit(-1)
     #raise newException(Error)
 
+#TODO: modify this procedure to recieve the index in the VersionsTable of the versions will be compared
 proc findGreatestOrEqual(srcTarget: string, versions: Table[string, string]): string =
   var target = srcTarget
   var result = ""
@@ -112,20 +161,27 @@ proc removeNonFloat(versionStr: string): string =
 proc findPreferredVersion*(versionStr: string, operator: string,
                           versionsTable: Table[string, string]): PreferredVersion =
   var versions = versionsTable
+  # TODO: handle versionsTable == 0
+  # the program was not found
+  if len(versionsTable) == 0:
+    echo "#######################################################################"
+    echo  "ERROR: Recipe not found"
+    echo "#######################################################################"
   try:
-    var version = removeNonFloat(versionStr)
-    for key in versions.keys():
-      # remove letters from versions, just ignore them for now
-      let newKey = removeNonFloat(key)
-      versions.add(newKey, versions[key])
-      versions.del(key)
-    let bestMatch = findVersion(version, operator, versions)
+    let bestMatch = findVersion(versionStr, operator, versionsTable)
+    echo "Best Match found $1" % [bestMatch]
+    # some rare case: installed version is greatest than
+    # versions on table, so it is not found in the table
+    if not versionsTable.hasKey(bestMatch):
+      # ignore requested version and send greatest in the table
+      return findPreferredVersion("0", operator, versionsTable)
+      
     let path = versions[bestMatch]
     echo "Best match is $1 : $2" % [bestMatch, path]
     return (bestMatch, path)
   except:
     for key in versions.keys():
-      echo (key, " : ", versions[key])
+      echo (key, ": ", versions[key])
     writeStackTrace()
     logError getCurrentExceptionMsg()
     raise getCurrentException()

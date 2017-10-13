@@ -7,7 +7,18 @@ import ../utils/logger
 
 #initialize configuration
 var conf = readConfiguration()
-      
+
+#generalization of user interaction via prompt
+proc yesNoPrompt(prompt: string, errorMsg: string ="Bad input"): int =
+  let input = readLineFromStdin(prompt)
+  if input.cmpIgnoreCase("y") == 0:
+    return 0
+  elif input.cmpIgnoreCase("n") == 0:
+    return 1
+  else:
+    echo errorMsg
+    return yesNoPrompt(prompt)
+
 proc buildFail(recipe: RecipeRef, target: string) =
   echo "Removing $1 " % target
   echo "Failed to compile $1 $2" % [recipe.program, recipe.version]
@@ -26,11 +37,12 @@ proc findProgramVersion(program: string, version: string): string =
   var path = conf.getSectionValue("compile", "programsDir")
   for dir in walkDir(path):
     if existsDir(dir.path) and dir.path.toLower.find(program.toLower) != -1:
-      echo dir.path
+      echo "Walinking $1" % [dir.path]
+      echo "--------------------------------------------"
       for subdir in walkDir(dir.path):
         let splitPath = subdir.path.split("/")
         var currentVersion = splitPath[len(splitPath) - 1]
-        versionsTable.add(subdir.path, currentVersion)
+        versionsTable.add(currentVersion, subdir.path)
       if len(versionsTable) > 0:
         var result = findPreferredVersion(version, ">=", versionsTable)
         return result.path
@@ -132,10 +144,13 @@ proc compileProgram(recipe: RecipeRef) =
   var filePath = archivesDir / fileName
   
   if not checkFile(filePath, recipe.file_size, recipe.file_md5):
-    let prompt = "\nFile found at: $1." % filePath &
-      "\n\rSize and md5 could not be verified. Remove and download again? y/n: " 
-    let input = readLineFromStdin(prompt)
-    if input.cmpIgnoreCase("y") == 0:
+    # let prompt = "\nFile found at: $1." % filePath &
+    #   "\n\rSize and md5 could not be verified. Remove and download again? y/n: " 
+    # let input = readLineFromStdin(prompt)
+    # if input.cmpIgnoreCase("y") == 0:
+    let input = yesNoPrompt("\nFile found at: $1." % filePath &
+      "\n\rSize and md5 could not be verified. Remove and download again? y/n: ")
+    if input == 0:
       echo "Removing and downloading file"
       removeFile(filePath)
       let (code, output) = download(url, archivesDir, fileName)
@@ -198,6 +213,8 @@ proc compile*(program: string, version: string) =
         echo "Compiling $1 $2"  % [currentRecipe.program, currentRecipe.version]        
         echo "Compile type $1" % currentRecipe.recipe_type
         echo "------------------------------------------------------------------"
-        compileProgram(currentRecipe)
+        let input = yesNoPrompt("\nProceed? y/n: ")
+        if input == 0:
+          compileProgram(currentRecipe)
   else:
     echo "Recipe not found"
